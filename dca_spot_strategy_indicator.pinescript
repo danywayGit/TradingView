@@ -1,0 +1,178 @@
+//@version=6
+indicator(title = 'DCA Buy v10 - Enhanced with Score', shorttitle = 'DCABuy_v10', overlay = true, max_labels_count=500)
+
+// === Input Parameters ===
+lenema200 = input.int(title = 'EMA 200 Length', defval = 200, minval = 1)
+lenema9 = input.int(title = 'EMA 9 Length', defval = 9, minval = 1)
+rsiLength = input.int(title = 'RSI Length', defval = 14, minval = 1)
+volumeLookback = input.int(title = 'Volume Lookback', defval = 20, minval = 1)
+scoreThresholdBuy = input.int(title = 'Score Threshold for Buy Signal', defval = 4, minval = 1, maxval = 9)
+scoreThresholdSell = input.int(title = 'Score Threshold for Sell Signal', defval = 5, minval = 1, maxval = 9)
+
+leftbar = input.int(title = 'Leftbar', defval = 15, minval = 1, group = 'Pivots')
+rightbar = input.int(title = 'Rightbar', defval = 2, minval = 0, group = 'Pivots')
+pivothighfiler = input.float(title = 'Minimum pivot high', defval = 15, minval = 0, step = 1, group = 'Pivots')
+pivotlowfiler = input.float(title = 'Maximum pivot low', defval = -15, maxval = 0, step = 1, group = 'Pivots')
+
+// === Core Calculations ===
+ema200 = ta.ema(close, lenema200)
+ema9 = ta.ema(close, lenema9)
+
+// Standard EMA distance calculation (negative = below EMA)
+emaDistance = (close - ema200) / ema200 * 100
+
+// RSI
+myrsi = ta.rsi(close, rsiLength)
+
+// Volume analysis
+avgVolume = ta.sma(volume, volumeLookback)
+volumeSpike = volume > avgVolume * 1.5
+
+// === Scoring System ===
+score = 0
+
+// 1. Distance from 200 EMA (Max 3 pts)
+// For buy signals (below EMA)
+if emaDistance <= -8 and emaDistance > -12
+    score := score + 1
+else if emaDistance <= -12 and emaDistance > -18
+    score := score + 2
+else if emaDistance <= -18
+    score := score + 3
+    
+// For sell signals (above EMA)
+sellScore = 0
+if emaDistance >= 8 and emaDistance < 12
+    sellScore := sellScore + 1
+else if emaDistance >= 12 and emaDistance < 18
+    sellScore := sellScore + 2
+else if emaDistance >= 18
+    sellScore := sellScore + 3
+
+// 2. RSI Level (Max 2 pts)
+// For buy signals
+if myrsi >= 35 and myrsi <= 45
+    score := score + 1
+else if myrsi < 35
+    score := score + 2
+
+// For sell signals
+if myrsi >= 55 and myrsi <= 65
+    sellScore := sellScore + 1
+else if myrsi > 65
+    sellScore := sellScore + 2
+
+// 3. V-shape Pattern (2 pts) - For buy signals
+lookback = 20
+lowestLow = ta.lowest(emaDistance, lookback)
+highestHigh = ta.highest(emaDistance, lookback)
+distRange = highestHigh - lowestLow
+isInLowestQuartile = emaDistance <= lowestLow + distRange * 0.25
+isRecovering = emaDistance > emaDistance[1]
+if isInLowestQuartile and isRecovering
+    score := score + 2
+
+// ^-shape Pattern (2 pts) - For sell signals
+isInHighestQuartile = emaDistance >= highestHigh - distRange * 0.25
+isDeclining = emaDistance < emaDistance[1]
+if isInHighestQuartile and isDeclining
+    sellScore := sellScore + 2
+
+// 4. Price Acceleration (1 pt)
+// For buy signals - significant drop
+distanceWorsened = (emaDistance[0] - emaDistance[2]) <= -3
+if distanceWorsened
+    score := score + 1
+
+// For sell signals - significant rise
+distanceImproved = (emaDistance[0] - emaDistance[2]) >= 3
+if distanceImproved
+    sellScore := sellScore + 1
+
+// 5. Volume Spike (1 pt) - Counts for both signals
+if volumeSpike
+    score := score + 1
+    sellScore := sellScore + 1
+
+// === Pivot Detection ===
+// Detect pivot candidates
+pivotLowCandidate = ta.lowest(emaDistance, leftbar+rightbar+1) == emaDistance[leftbar] and 
+  emaDistance[leftbar] < emaDistance[leftbar+rightbar] and
+  emaDistance[leftbar] < emaDistance[leftbar+1]
+                   
+pivotHighCandidate = ta.highest(emaDistance, leftbar+rightbar+1) == emaDistance[leftbar] and 
+  emaDistance[leftbar] > emaDistance[leftbar+rightbar] and
+  emaDistance[leftbar] > emaDistance[leftbar+1]
+
+// Apply filters to candidates
+validPivotLow = pivotLowCandidate and emaDistance[leftbar] <= pivotlowfiler
+validPivotHigh = pivotHighCandidate and emaDistance[leftbar] >= pivothighfiler
+
+// === Signal Generation ===
+// Buy signal conditions
+buyConditions = score >= scoreThresholdBuy and 
+  emaDistance < 0 and 
+  myrsi < 45 and 
+  validPivotLow
+
+// Sell signal conditions
+sellConditions = sellScore >= scoreThresholdSell and 
+  emaDistance > 0 and 
+  myrsi > 55 and 
+  validPivotHigh
+
+// === Signal Filtering ===
+// Filter consecutive signals
+var int lastBuySignal = na
+var int lastSellSignal = na
+
+buySignal = buyConditions and (na(lastBuySignal) or bar_index - lastBuySignal > 5)
+sellSignal = sellConditions and (na(lastSellSignal) or bar_index - lastSellSignal > 5)
+
+if buySignal
+    lastBuySignal := bar_index
+if sellSignal
+    lastSellSignal := bar_index
+
+// === Plotting ===
+plot(title = 'EMA 200', series = ema200, color = color.new(color.red, 0), linewidth=2)
+plot(title = 'EMA 9', series = ema9, color = color.new(color.yellow, 0), linewidth=2)
+
+// Score display for buy signals
+if buySignal
+    label.new(bar_index, low * 0.98, 
+              text = "BUY\nScore: " + str.tostring(score) + "\nDist: " + str.tostring(emaDistance, "#.##") + "%\nRSI: " + str.tostring(myrsi, "#.##"), 
+              style = label.style_label_up, 
+              color = color.green, 
+              textcolor = color.white, 
+              size = size.small)
+
+// Score display for sell signals
+if sellSignal
+    label.new(bar_index, high * 1.02, 
+              text = "SELL\nScore: " + str.tostring(sellScore) + "\nDist: " + str.tostring(emaDistance, "#.##") + "%\nRSI: " + str.tostring(myrsi, "#.##"), 
+              style = label.style_label_down, 
+              color = color.red, 
+              textcolor = color.white, 
+              size = size.small)
+
+// Plot buy signals
+plotshape(series = buySignal, title = 'Buy Signal', style = shape.triangleup, 
+          location = location.belowbar, color = color.green, size = size.normal)
+
+// Plot sell signals
+plotshape(series = sellSignal, title = 'Sell Signal', style = shape.triangledown, 
+          location = location.abovebar, color = color.red, size = size.normal)
+
+// === Webhook Integration ===
+alertcondition(buySignal, title = 'DCA Buy Signal', 
+              message = 'DCA_BUY|BTC|{close}|{emaDistance}|{score}|{myrsi}')
+alertcondition(sellSignal, title = 'DCA Sell Signal', 
+              message = 'DCA_SELL|BTC|{close}|{emaDistance}|{score}|{myrsi}')
+
+// === Debug Plots ===
+//plot(title = 'EMA Distance', series = emaDistance, color = color.new(color.blue, 70), linewidth=2)
+//hline(0, "Zero Line", color = color.new(color.gray, 0))
+plot(title = 'EMA Distance', series = emaDistance, color = color.new(color.blue, 100), linewidth=2)
+plot(title = 'isInLowestQuartile', series = isInLowestQuartile ? 1 : 0, color = color.new(color.aqua, 100), linewidth=2)
+plot(title = 'isRecovering', series = isRecovering ? 1 : 0, color = color.new(color.green, 100), linewidth=2)
