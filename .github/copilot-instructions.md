@@ -54,6 +54,7 @@ Alert messages follow pattern: `DCA_BUY|BTC|{close}|{emaDistance}|{score}|{myrsi
 - Store state variables with `var` keyword for bar-to-bar persistence
 - Calculate `emaDistance` as percentage: `(close - ema200) / ema200 * 100`
 - Always validate signal conditions before label/plotshape rendering
+- **Multi-line formatting**: No trailing spaces on first line; continuation lines start with 2 spaces
 
 ### Code Organization Pattern
 ```pine

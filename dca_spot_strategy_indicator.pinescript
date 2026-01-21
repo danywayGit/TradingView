@@ -81,13 +81,25 @@ distRange = highestHigh - lowestLow
 isInLowestQuartile = emaDistance <= lowestLow + distRange * 0.25
 isRecovering = emaDistance > emaDistance[1]
 isInLowestQuartileContext = isInLowestQuartile and isRecovering
-if isInLowestQuartileContext
-    score := score + 2
 
 isInHighestQuartile = emaDistance >= highestHigh - distRange * 0.25
 isDeclining = emaDistance < emaDistance[1]
 isInHighestQuartileContext = isInHighestQuartile and isDeclining
-if isInHighestQuartileContext
+
+// Track when V-shape patterns occur
+barsSinceVShapeBuy = ta.barssince(isInLowestQuartileContext)
+barsSinceVShapeSell = ta.barssince(isInHighestQuartileContext)
+
+// Award V-shape points only if base and V-shape occurred within 10 bars of each other
+vShapeWithinBuyWindow = (not na(barsSinceBuyBase) and barsSinceBuyBase <= 10) and
+  (not na(barsSinceVShapeBuy) and barsSinceVShapeBuy <= 10)
+vShapeWithinSellWindow = (not na(barsSinceSellBase) and barsSinceSellBase <= 10) and
+  (not na(barsSinceVShapeSell) and barsSinceVShapeSell <= 10)
+
+if vShapeWithinBuyWindow
+    score := score + 2
+
+if vShapeWithinSellWindow
     sellScore := sellScore + 2
 
 // 4. Price Acceleration (1 pt) - Only counts if points 1 AND 2 met within 5 candles
@@ -121,15 +133,15 @@ validPivotHigh = pivotHighCandidate and emaDistance[leftbar] >= pivothighfiler
 
 // === Signal Generation ===
 // Buy signal conditions
-buyConditions = score >= scoreThresholdBuy and 
-  emaDistance < 0 and 
-  myrsi < 45 and 
+buyConditions = score >= scoreThresholdBuy and
+  emaDistance < 0 and
+  myrsi < 45 and
   validPivotLow
 
 // Sell signal conditions
-sellConditions = sellScore >= scoreThresholdSell and 
-  emaDistance > 0 and 
-  myrsi > 55 and 
+sellConditions = sellScore >= scoreThresholdSell and
+  emaDistance > 0 and
+  myrsi > 55 and
   validPivotHigh
 
 // === Signal Filtering ===
@@ -151,43 +163,45 @@ plot(title = 'EMA 9', series = ema9, color = color.new(color.yellow, 0), linewid
 
 // Score display for buy signals
 if buySignal
-    label.new(bar_index, low * 0.98, 
-              text = "BUY\nScore: " + str.tostring(score) + "\nDist: " + str.tostring(emaDistance, "#.##") + "%\nRSI: " + str.tostring(myrsi, "#.##"), 
-              style = label.style_label_up, 
-              color = color.green, 
-              textcolor = color.white, 
-              size = size.small)
+    label.new(bar_index, low * 0.98,
+  text = "BUY\nScore: " + str.tostring(score) + "\nDist: " + str.tostring(emaDistance, "#.##") + "%\nRSI: " + str.tostring(myrsi, "#.##"),
+  style = label.style_label_up,
+  color = color.green,
+  textcolor = color.white,
+  size = size.small)
 
 // Score display for sell signals
 if sellSignal
-    label.new(bar_index, high * 1.02, 
-              text = "SELL\nScore: " + str.tostring(sellScore) + "\nDist: " + str.tostring(emaDistance, "#.##") + "%\nRSI: " + str.tostring(myrsi, "#.##"), 
-              style = label.style_label_down, 
-              color = color.red, 
-              textcolor = color.white, 
-              size = size.small)
+    label.new(bar_index, high * 1.02,
+  text = "SELL\nScore: " + str.tostring(sellScore) + "\nDist: " + str.tostring(emaDistance, "#.##") + "%\nRSI: " + str.tostring(myrsi, "#.##"),
+  style = label.style_label_down,
+  color = color.red,
+  textcolor = color.white,
+  size = size.small)
 
 // Plot buy signals
-plotshape(series = buySignal, title = 'Buy Signal', style = shape.triangleup, 
-          location = location.belowbar, color = color.green, size = size.normal)
+plotshape(series = buySignal, title = 'Buy Signal', style = shape.triangleup,
+  location = location.belowbar, color = color.green, size = size.normal)
 
 // Plot sell signals
-plotshape(series = sellSignal, title = 'Sell Signal', style = shape.triangledown, 
-          location = location.abovebar, color = color.red, size = size.normal)
+plotshape(series = sellSignal, title = 'Sell Signal', style = shape.triangledown,
+  location = location.abovebar, color = color.red, size = size.normal)
 
 // === Webhook Integration ===
-alertcondition(buySignal, title = 'DCA Buy Signal', 
-              message = 'DCA_BUY|BTC|{close}|{emaDistance}|{score}|{myrsi}')
-alertcondition(sellSignal, title = 'DCA Sell Signal', 
-              message = 'DCA_SELL|BTC|{close}|{emaDistance}|{score}|{myrsi}')
+alertcondition(buySignal, title = 'DCA Buy Signal',
+  message = 'DCA_BUY|BTC|{close}|{emaDistance}|{score}|{myrsi}')
+alertcondition(sellSignal, title = 'DCA Sell Signal',
+  message = 'DCA_SELL|BTC|{close}|{emaDistance}|{score}|{myrsi}')
 
 // === Debug Plots ===
 //plot(title = 'EMA Distance', series = emaDistance, color = color.new(color.blue, 70), linewidth=2)
 //hline(0, "Zero Line", color = color.new(color.gray, 0))
 plot(title = 'EMA Distance', series = emaDistance, color = color.new(color.blue, 100), linewidth=2)
-plot(title = 'isInLowestQuartile', series = isInLowestQuartile ? 1 : 0, color = color.new(color.aqua, 100), linewidth=2)
-plot(title = 'isRecovering', series = isRecovering ? 1 : 0, color = color.new(color.green, 100), linewidth=2)
-plot(title = 'isInLowestQuartileContext', series = isInLowestQuartileContext ? 1 : 0, color = color.new(color.green, 100), linewidth=2)
-plot(title = 'barsSinceBuyBase', series = barsSinceBuyBase, color = color.new(color.fuchsia, 100), linewidth=2)
+//plot(title = 'isInLowestQuartile', series = isInLowestQuartile ? 1 : 0, color = color.new(color.aqua, 100), linewidth=2)
+//plot(title = 'isRecovering', series = isRecovering ? 1 : 0, color = color.new(color.green, 100), linewidth=2)
+//plot(title = 'isInLowestQuartileContext', series = isInLowestQuartileContext ? 1 : 0, color = color.new(color.green, 100), linewidth=2)
+//plot(title = 'barsSinceBuyBase', series = barsSinceBuyBase, color = color.new(color.fuchsia, 100), linewidth=2)
+plot(title = 'barsSinceVShapeBuy', series = barsSinceVShapeBuy, color = color.new(color.lime, 100), linewidth=2)
+plot(title = 'barsSinceVShapeSell', series = barsSinceVShapeSell, color = color.new(color.maroon, 100), linewidth=2)
 plot(title = 'score', series = score, color = color.new(color.orange, 0), linewidth=2)
 plot(title = 'sellScore', series = sellScore, color = color.new(color.purple, 0), linewidth=2)
