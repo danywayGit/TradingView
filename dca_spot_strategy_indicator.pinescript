@@ -104,17 +104,34 @@ if vShapeWithinSellWindow
 
 // 4. Price Acceleration (1 pt) - Only counts if points 1 AND 2 met within 5 candles
 distanceWorsened = (emaDistance[0] - emaDistance[2]) <= -3
-if distanceWorsened 
+distanceImproved = (emaDistance[0] - emaDistance[2]) >= 3
+
+barsSinceAccelerationBuy = ta.barssince(distanceWorsened)
+barsSinceAccelerationSell = ta.barssince(distanceImproved)
+
+accelerationWithinBuyWindow = (not na(barsSinceBuyBase) and barsSinceBuyBase <= 5) and
+  (not na(barsSinceAccelerationBuy) and barsSinceAccelerationBuy <= 5)
+accelerationWithinSellWindow = (not na(barsSinceSellBase) and barsSinceSellBase <= 5) and
+  (not na(barsSinceAccelerationSell) and barsSinceAccelerationSell <= 5)
+
+if accelerationWithinBuyWindow
     score := score + 1
 
-distanceImproved = (emaDistance[0] - emaDistance[2]) >= 3
-if distanceImproved
+if accelerationWithinSellWindow
     sellScore := sellScore + 1
 
 // 5. Volume Spike (1 pt) - Only counts if points 1 AND 2 met within 5 candles
-if volumeSpike
+barsSinceVolume = ta.barssince(volumeSpike)
+
+volumeWithinBuyWindow = (not na(barsSinceBuyBase) and barsSinceBuyBase <= 5) and
+  (not na(barsSinceVolume) and barsSinceVolume <= 5)
+volumeWithinSellWindow = (not na(barsSinceSellBase) and barsSinceSellBase <= 5) and
+  (not na(barsSinceVolume) and barsSinceVolume <= 5)
+
+if volumeWithinBuyWindow
     score := score + 1
-if volumeSpike
+
+if volumeWithinSellWindow
     sellScore := sellScore + 1
 
 // === Pivot Detection ===
@@ -203,5 +220,8 @@ plot(title = 'EMA Distance', series = emaDistance, color = color.new(color.blue,
 //plot(title = 'barsSinceBuyBase', series = barsSinceBuyBase, color = color.new(color.fuchsia, 100), linewidth=2)
 plot(title = 'barsSinceVShapeBuy', series = barsSinceVShapeBuy, color = color.new(color.lime, 100), linewidth=2)
 plot(title = 'barsSinceVShapeSell', series = barsSinceVShapeSell, color = color.new(color.maroon, 100), linewidth=2)
+plot(title = 'barsSinceAccelerationBuy', series = barsSinceAccelerationBuy, color = color.new(color.aqua, 100), linewidth=2)
+plot(title = 'barsSinceAccelerationSell', series = barsSinceAccelerationSell, color = color.new(color.navy, 100), linewidth=2)
+plot(title = 'barsSinceVolume', series = barsSinceVolume, color = color.new(color.silver, 100), linewidth=2)
 plot(title = 'score', series = score, color = color.new(color.orange, 0), linewidth=2)
 plot(title = 'sellScore', series = sellScore, color = color.new(color.purple, 0), linewidth=2)
