@@ -30,9 +30,9 @@ volumeSpike = volume > avgVolume * 1.5
 
 // === Scoring System ===
 score = 0
+sellScore = 0
 
 // 1. Distance from 200 EMA (Max 3 pts)
-// For buy signals (below EMA)
 if emaDistance <= -8 and emaDistance > -12
     score := score + 1
 else if emaDistance <= -12 and emaDistance > -18
@@ -40,8 +40,6 @@ else if emaDistance <= -12 and emaDistance > -18
 else if emaDistance <= -18
     score := score + 3
     
-// For sell signals (above EMA)
-sellScore = 0
 if emaDistance >= 8 and emaDistance < 12
     sellScore := sellScore + 1
 else if emaDistance >= 12 and emaDistance < 18
@@ -50,48 +48,61 @@ else if emaDistance >= 18
     sellScore := sellScore + 3
 
 // 2. RSI Level (Max 2 pts)
-// For buy signals
 if myrsi >= 35 and myrsi <= 45
     score := score + 1
 else if myrsi < 35
     score := score + 2
 
-// For sell signals
 if myrsi >= 55 and myrsi <= 65
     sellScore := sellScore + 1
 else if myrsi > 65
     sellScore := sellScore + 2
 
-// 3. V-shape Pattern (2 pts) - For buy signals
+// Base conditions matching exact scoring logic (points 1 AND 2 together)
+point1Buy = (emaDistance <= -8 and emaDistance > -12) or (emaDistance <= -12 and emaDistance > -18) or (emaDistance <= -18)
+point2Buy = (myrsi >= 35 and myrsi <= 45) or (myrsi < 35)
+baseBuyCondition = point1Buy and point2Buy
+
+point1Sell = (emaDistance >= 8 and emaDistance < 12) or (emaDistance >= 12 and emaDistance < 18) or (emaDistance >= 18)
+point2Sell = (myrsi >= 55 and myrsi <= 65) or (myrsi > 65)
+baseSellCondition = point1Sell and point2Sell
+
+// 3. V-shape Pattern (2 pts) - Only counts if points 1 AND 2 met within 10 candles
+barsSinceBuyBase = ta.barssince(baseBuyCondition)
+barsSinceSellBase = ta.barssince(baseSellCondition)
+
+// Calculates the full range of EMA distance values over the 20-bar period
+// This determines if the current price is in the lowest 25% of its recent range relative to the EMA 200
+// It's looking for significant dips below the EMA 200
 lookback = 20
 lowestLow = ta.lowest(emaDistance, lookback)
 highestHigh = ta.highest(emaDistance, lookback)
 distRange = highestHigh - lowestLow
 isInLowestQuartile = emaDistance <= lowestLow + distRange * 0.25
 isRecovering = emaDistance > emaDistance[1]
-if isInLowestQuartile and isRecovering
+isInLowestQuartileContext = isInLowestQuartile and isRecovering
+if isInLowestQuartileContext
     score := score + 2
 
-// ^-shape Pattern (2 pts) - For sell signals
 isInHighestQuartile = emaDistance >= highestHigh - distRange * 0.25
 isDeclining = emaDistance < emaDistance[1]
-if isInHighestQuartile and isDeclining
+isInHighestQuartileContext = isInHighestQuartile and isDeclining
+if isInHighestQuartileContext
     sellScore := sellScore + 2
 
-// 4. Price Acceleration (1 pt)
-// For buy signals - significant drop
+// 4. Price Acceleration (1 pt) - Only counts if points 1 AND 2 met within 5 candles
 distanceWorsened = (emaDistance[0] - emaDistance[2]) <= -3
-if distanceWorsened
+if distanceWorsened 
     score := score + 1
 
-// For sell signals - significant rise
 distanceImproved = (emaDistance[0] - emaDistance[2]) >= 3
 if distanceImproved
     sellScore := sellScore + 1
 
-// 5. Volume Spike (1 pt) - Counts for both signals
+// 5. Volume Spike (1 pt) - Only counts if points 1 AND 2 met within 5 candles
 if volumeSpike
     score := score + 1
+if volumeSpike
     sellScore := sellScore + 1
 
 // === Pivot Detection ===
@@ -176,3 +187,7 @@ alertcondition(sellSignal, title = 'DCA Sell Signal',
 plot(title = 'EMA Distance', series = emaDistance, color = color.new(color.blue, 100), linewidth=2)
 plot(title = 'isInLowestQuartile', series = isInLowestQuartile ? 1 : 0, color = color.new(color.aqua, 100), linewidth=2)
 plot(title = 'isRecovering', series = isRecovering ? 1 : 0, color = color.new(color.green, 100), linewidth=2)
+plot(title = 'isInLowestQuartileContext', series = isInLowestQuartileContext ? 1 : 0, color = color.new(color.green, 100), linewidth=2)
+plot(title = 'barsSinceBuyBase', series = barsSinceBuyBase, color = color.new(color.fuchsia, 100), linewidth=2)
+plot(title = 'score', series = score, color = color.new(color.orange, 0), linewidth=2)
+plot(title = 'sellScore', series = sellScore, color = color.new(color.purple, 0), linewidth=2)
