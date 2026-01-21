@@ -11,8 +11,8 @@ scoreThresholdSell = input.int(title = 'Score Threshold for Sell Signal', defval
 
 leftbar = input.int(title = 'Leftbar', defval = 15, minval = 1, group = 'Pivots')
 rightbar = input.int(title = 'Rightbar', defval = 2, minval = 0, group = 'Pivots')
-pivothighfiler = input.float(title = 'Minimum pivot high', defval = 15, minval = 0, step = 1, group = 'Pivots')
-pivotlowfiler = input.float(title = 'Maximum pivot low', defval = -15, maxval = 0, step = 1, group = 'Pivots')
+pivothighfilter = input.float(title = 'Minimum pivot high', defval = 15, minval = 0, step = 1, group = 'Pivots')
+pivotlowfilter = input.float(title = 'Minimum pivot low', defval = -15, maxval = 0, step = 1, group = 'Pivots')
 
 // === Core Calculations ===
 ema200 = ta.ema(close, lenema200)
@@ -33,18 +33,18 @@ score = 0
 sellScore = 0
 
 // 1. Distance from 200 EMA (Max 3 pts)
-if emaDistance <= -8 and emaDistance > -12
+if emaDistance <= pivotlowfilter and emaDistance > pivotlowfilter - 3
     score := score + 1
-else if emaDistance <= -12 and emaDistance > -18
+else if emaDistance <= pivotlowfilter - 3 and emaDistance > pivotlowfilter - 6
     score := score + 2
-else if emaDistance <= -18
+else if emaDistance <= pivotlowfilter - 6
     score := score + 3
     
-if emaDistance >= 8 and emaDistance < 12
+if emaDistance >= pivothighfilter and emaDistance < pivothighfilter + 3
     sellScore := sellScore + 1
-else if emaDistance >= 12 and emaDistance < 18
+else if emaDistance >= pivothighfilter + 3 and emaDistance < pivothighfilter + 6
     sellScore := sellScore + 2
-else if emaDistance >= 18
+else if emaDistance >= pivothighfilter + 6
     sellScore := sellScore + 3
 
 // 2. RSI Level (Max 2 pts)
@@ -59,11 +59,11 @@ else if myrsi > 65
     sellScore := sellScore + 2
 
 // Base conditions matching exact scoring logic (points 1 AND 2 together)
-point1Buy = (emaDistance <= -8 and emaDistance > -12) or (emaDistance <= -12 and emaDistance > -18) or (emaDistance <= -18)
+point1Buy = (emaDistance <= pivotlowfilter and emaDistance > pivotlowfilter - 3) or (emaDistance <= pivotlowfilter - 3 and emaDistance > pivotlowfilter - 6) or (emaDistance <= pivotlowfilter - 6)
 point2Buy = (myrsi >= 35 and myrsi <= 45) or (myrsi < 35)
 baseBuyCondition = point1Buy and point2Buy
 
-point1Sell = (emaDistance >= 8 and emaDistance < 12) or (emaDistance >= 12 and emaDistance < 18) or (emaDistance >= 18)
+point1Sell = (emaDistance >= pivothighfilter and emaDistance < pivothighfilter + 3) or (emaDistance >= pivothighfilter + 3 and emaDistance < pivothighfilter + 6) or (emaDistance >= pivothighfilter + 6)
 point2Sell = (myrsi >= 55 and myrsi <= 65) or (myrsi > 65)
 baseSellCondition = point1Sell and point2Sell
 
@@ -145,8 +145,8 @@ pivotHighCandidate = ta.highest(emaDistance, leftbar+rightbar+1) == emaDistance[
   emaDistance[leftbar] > emaDistance[leftbar+1]
 
 // Apply filters to candidates
-validPivotLow = pivotLowCandidate and emaDistance[leftbar] <= pivotlowfiler
-validPivotHigh = pivotHighCandidate and emaDistance[leftbar] >= pivothighfiler
+validPivotLow = pivotLowCandidate and emaDistance[leftbar] <= pivotlowfilter
+validPivotHigh = pivotHighCandidate and emaDistance[leftbar] >= pivothighfilter
 
 // === Signal Generation ===
 // Buy signal conditions
@@ -223,5 +223,5 @@ plot(title = 'barsSinceVShapeSell', series = barsSinceVShapeSell, color = color.
 plot(title = 'barsSinceAccelerationBuy', series = barsSinceAccelerationBuy, color = color.new(color.aqua, 100), linewidth=2)
 plot(title = 'barsSinceAccelerationSell', series = barsSinceAccelerationSell, color = color.new(color.navy, 100), linewidth=2)
 plot(title = 'barsSinceVolume', series = barsSinceVolume, color = color.new(color.silver, 100), linewidth=2)
-plot(title = 'score', series = score, color = color.new(color.orange, 0), linewidth=2)
-plot(title = 'sellScore', series = sellScore, color = color.new(color.purple, 0), linewidth=2)
+plot(title = 'score', series = score, color = color.new(color.orange, 100), linewidth=2)
+plot(title = 'sellScore', series = sellScore, color = color.new(color.purple, 100), linewidth=2)
