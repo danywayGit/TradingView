@@ -1,0 +1,309 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © danywaystrige
+
+//@version=5
+indicator("Manual Trading",overlay=true)
+
+dispaytp2 = input.bool(defval = false, title="Display Take Profit 2", confirm=true)
+dispaytp3 = input.bool(defval = false, title="Display Take Profit 3", confirm=true)
+
+
+EntryPrice  = input.price(defval=0, title = "Entry Price", confirm=true)
+StopLoss    = input.price(defval=0, title = "Stop Loss", confirm=true)
+TakeProfit1 = input.price(defval=0, title = "Take Profit 1", confirm=true)
+Since       = input.time(defval=timestamp("01 Apr 2022 13:30 +0000"), title = "Trade is valide from", confirm=true)
+Username    = input.string(defval="Danyway", title="Username")
+AccountType = input.string(defval="Standard", title="Account Type", options=["Standard", "CopyTrading", "Demo", "TestNet"])
+TakeProfit2 = input.price(0.9801, title = "Take Profit 2")
+TakeProfit3 = input.price(0.9999, title = "Take Profit 3")
+
+
+//ResetInPosition = input.bool(false, title = "Reset In Position")
+//ResetTradeClose = input.bool(false, title = "Reset Trage Close")
+
+show_offset_nb = 15
+show_last_nb = 100
+
+plot(EntryPrice,title='Entry Price',color=color.new(color.white, 0), linewidth=2, offset=show_offset_nb, show_last=show_last_nb)
+plot(StopLoss,title='Stop Loss',color=color.new(color.red, 0), linewidth=2, offset=show_offset_nb, show_last=show_last_nb)
+plot(TakeProfit1,title='Take Profit 1',color=color.new(color.green, 0), linewidth=2, offset=show_offset_nb, show_last=show_last_nb)
+plot(dispaytp2 ? TakeProfit2 : na ,title='Take Profit 2',color=color.new(color.green, 0), offset=show_offset_nb, show_last=show_last_nb)
+plot(dispaytp3 ? TakeProfit3 : na ,title='Take Profit 3',color=color.new(color.green, 0), offset=show_offset_nb, show_last=show_last_nb)
+
+label_style_long_sl = label.style_label_up
+label_style_long_tp = label.style_label_down
+
+if EntryPrice > StopLoss
+    label_style_long_sl := label.style_label_up
+    label_style_long_tp := label.style_label_down
+else
+    label_style_long_sl := label.style_label_down
+    label_style_long_tp := label.style_label_up
+
+var entry_sl = math.abs(EntryPrice - StopLoss)
+var entry_tp = math.abs(EntryPrice - TakeProfit1)
+var RRR = math.round((entry_tp / entry_sl), 1)
+
+var label_RRR = label.new(bar_index, TakeProfit1, style=label_style_long_tp, text="Risk Reward Ratio : " + str.tostring(RRR))
+label.set_x(label_RRR, 0)
+label.set_xloc(label_RRR, time, xloc.bar_time)
+
+var stop_pourcentage = math.round(math.abs((StopLoss-EntryPrice) * 100) / EntryPrice, 2)
+
+var label_stop = label.new(bar_index, StopLoss, style=label_style_long_sl, text="Stop Loss : " + str.tostring(stop_pourcentage) + "%")
+label.set_x(label_stop, 0)
+label.set_xloc(label_stop, time, xloc.bar_time)
+
+
+_ticker = syminfo.ticker
+_currenttf = timeframe.period
+var inPosition = false //in case a trade have been open, and close, to prevent, a new trade to be open, and to prevent to close more than once, a trade.
+var LongTradeClose = false
+var ShortTradeClose = false
+
+string side = na
+string _side = na
+string _entry = na
+string _stop_loss = na
+string _take_profit1 = na
+string _strategy = na
+string _action = na
+
+_username = "Username: " + Username + ","
+_accounttype = "AccountType: " + AccountType + ","
+_exchange = "Exchange: Binance,"
+
+LongEntryCrossed = (ta.crossunder(close, EntryPrice) or ta.crossunder(low, EntryPrice) or ta.crossunder(open, EntryPrice))
+ShortEntryCrossed = (ta.crossover(close, EntryPrice) or ta.crossover(high, EntryPrice) or ta.crossover(open, EntryPrice))
+LongStopLossCrossed = (ta.crossunder(close, StopLoss) or ta.crossunder(low, StopLoss) or ta.crossunder(open, StopLoss))
+ShortStopLossCrossed = (ta.crossover(close, StopLoss) or ta.crossover(high, StopLoss) or ta.crossover(open, StopLoss))
+LongTakeProfit1Crossed = (ta.crossover(close, TakeProfit1) or ta.crossover(high, TakeProfit1) or ta.crossover(open, TakeProfit1))
+ShortTakeProfit1Crossed = (ta.crossunder(close, TakeProfit1) or ta.crossunder(low, TakeProfit1) or ta.crossunder(open, TakeProfit1))    
+
+secretKey = "YOUR_SECRET_KEY_HERE"
+
+// Open Long Position
+if time >= Since and barstate.islast
+    if EntryPrice > StopLoss and not inPosition and not LongTradeClose
+        side := "BUY"
+        if LongEntryCrossed
+            _shortticker = str.replace_all(_ticker, "BINANCE:", "")
+            _shortticker := str.replace_all(_shortticker, "USDT.P", "USDT")
+            _symbol = "Symbol: " + _shortticker + ","
+            _timeframe = "Time Frame: " + _currenttf + ","
+            _side := "Side: " + side + ","
+            _entry := "Entry: " + str.tostring(EntryPrice) + ","
+            _stop_loss := "StopLoss: " + str.tostring(StopLoss) + ","
+            _take_profit1 := "TakeProfit: " + str.tostring(TakeProfit1) + ","
+            _strategy := "Strategy: " + "ManualTrading" + ","
+            _action := "Action: " + "OpenLong"
+            
+            _msg = "{"
+            _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
+                 _symbol + "\\n" +
+                 _exchange + "\\n" +
+                 _timeframe + "\\n" +
+                 _side + "\\n" +
+                 _entry + "\\n" +
+                 _stop_loss + "\\n" +
+                 _take_profit1 + "\\n" +
+                 _strategy + "\\n" +
+                 _action + '"'
+            _msg := _msg + "}"
+            
+            inPosition := true
+            //alert(_msg, alert.freq_once_per_bar)
+            alert(_msg, alert.freq_once_per_bar_close)
+
+// Open Short Position
+    if EntryPrice < StopLoss and not inPosition and not ShortTradeClose
+        side := "SELL"
+        if ShortEntryCrossed
+            _shortticker = str.replace_all(_ticker, "BINANCE:", "")
+            _shortticker := str.replace_all(_shortticker, "USDT.P", "USDT")
+            _symbol = "Symbol: " + _shortticker + ","
+            _timeframe = "Time Frame: " + _currenttf + ","
+            _side := "Side: " + side + ","
+            _entry := "Entry: " + str.tostring(EntryPrice) + ","
+            _stop_loss := "StopLoss: " + str.tostring(StopLoss) + ","
+            _take_profit1 := "TakeProfit: " + str.tostring(TakeProfit1) + ","
+            _strategy := "Strategy: " + "ManualTrading" + ","
+            _action := "Action: " + "OpenShort"
+            
+            _msg = "{"
+            _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
+                 _symbol + "\\n" +
+                 _exchange + "\\n" +
+                 _timeframe + "\\n" +
+                 _side + "\\n" +
+                 _entry + "\\n" +
+                 _stop_loss + "\\n" +
+                 _take_profit1 + "\\n" +
+                 _strategy + "\\n" +
+                 _action + '"'
+            _msg := _msg + "}"
+            
+            inPosition := true
+            //alert(_msg, alert.freq_once_per_bar)
+            alert(_msg, alert.freq_once_per_bar_close)
+            
+
+// StopLoss for a Long Position
+    if EntryPrice > StopLoss and inPosition and not LongTradeClose
+        side := "SELL"
+        if LongStopLossCrossed
+            _shortticker = str.replace_all(_ticker, "BINANCE:", "")
+            _shortticker := str.replace_all(_shortticker, "USDT.P", "USDT")
+            _symbol = "Symbol: " + _shortticker + ","
+            _timeframe = "Time Frame: " + _currenttf + ","
+            _side := "Side: " + side + ","
+            _entry := "Entry: " + str.tostring(EntryPrice) + ","
+            _stop_loss := "StopLoss: " + str.tostring(StopLoss) + ","
+            _take_profit1 := "TakeProfit: " + str.tostring(TakeProfit1) + ","
+            _strategy := "Strategy: " + "ManualTrading" + ","
+            _action := "Action: " + "StopLong"
+            
+            _msg = "{"
+            _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
+                 _symbol + "\\n" +
+                 _exchange + "\\n" +
+                 _timeframe + "\\n" +
+                 _side + "\\n" +
+                 _entry + "\\n" +
+                 _stop_loss + "\\n" +
+                 _take_profit1 + "\\n" +
+                 _strategy + "\\n" +
+                 _action + '"'
+            _msg := _msg + "}"
+            
+            inPosition := false
+            LongTradeClose := true
+            //alert(_msg, alert.freq_once_per_bar)
+            alert(_msg, alert.freq_once_per_bar_close)
+
+// StopLoss for a Short Position
+    if EntryPrice < StopLoss and inPosition and not ShortTradeClose
+        side := "BUY"
+        if ShortStopLossCrossed
+            _shortticker = str.replace_all(_ticker, "BINANCE:", "")
+            _shortticker := str.replace_all(_shortticker, "USDT.P", "USDT")
+            _symbol = "Symbol: " + _shortticker + ","
+            _timeframe = "Time Frame: " + _currenttf + ","
+            _side := "Side: " + side + ","
+            _entry := "Entry: " + str.tostring(EntryPrice) + ","
+            _stop_loss := "StopLoss: " + str.tostring(StopLoss) + ","
+            _take_profit1 := "TakeProfit: " + str.tostring(TakeProfit1) + ","
+            _strategy := "Strategy: " + "ManualTrading" + ","
+            _action := "Action: " + "StopShort"
+            
+            _msg = "{"
+            _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
+                 _symbol + "\\n" +
+                 _exchange + "\\n" +
+                 _timeframe + "\\n" +
+                 _side + "\\n" +
+                 _entry + "\\n" +
+                 _stop_loss + "\\n" +
+                 _take_profit1 + "\\n" +
+                 _strategy + "\\n" +
+                 _action + '"'
+            _msg := _msg + "}"
+            
+            inPosition := false
+            ShortTradeClose := true
+            //alert(_msg, alert.freq_once_per_bar)
+            alert(_msg, alert.freq_once_per_bar_close)
+        
+// Take Profit for a Long Position
+    if EntryPrice > StopLoss and inPosition and not LongTradeClose
+        side := "SELL"
+        if LongTakeProfit1Crossed
+            _shortticker = str.replace_all(_ticker, "BINANCE:", "")
+            _shortticker := str.replace_all(_shortticker, "USDT.P", "USDT")
+            _symbol = "Symbol: " + _shortticker + ","
+            _timeframe = "Time Frame: " + _currenttf + ","
+            _side := "Side: " + side + ","
+            _entry := "Entry: " + str.tostring(EntryPrice) + ","
+            _stop_loss := "StopLoss: " + str.tostring(StopLoss) + ","
+            _take_profit1 := "TakeProfit: " + str.tostring(TakeProfit1) + ","
+            _strategy := "Strategy: " + "ManualTrading" + ","
+            _action := "Action: " + "TakeProfitLong"
+            
+            _msg = "{"
+            _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
+                 _symbol + "\\n" +
+                 _exchange + "\\n" +
+                 _timeframe + "\\n" +
+                 _side + "\\n" +
+                 _entry + "\\n" +
+                 _stop_loss + "\\n" +
+                 _take_profit1 + "\\n" +
+                 _strategy + "\\n" +
+                 _action + '"'
+            _msg := _msg + "}"
+            
+            inPosition := false
+            LongTradeClose := true
+            //alert(_msg, alert.freq_once_per_bar)
+            alert(_msg, alert.freq_once_per_bar_close)
+
+// Take Profit for a Short Position
+    if EntryPrice < StopLoss and inPosition and not ShortTradeClose
+        side := "BUY"
+        if ShortTakeProfit1Crossed
+            _shortticker = str.replace_all(_ticker, "BINANCE:", "")
+            _shortticker := str.replace_all(_shortticker, "USDT.P", "USDT")
+            _symbol = "Symbol: " + _shortticker + ","
+            _timeframe = "Time Frame: " + _currenttf + ","
+            _side := "Side: " + side + ","
+            _entry := "Entry: " + str.tostring(EntryPrice) + ","
+            _stop_loss := "StopLoss: " + str.tostring(StopLoss) + ","
+            _take_profit1 := "TakeProfit: " + str.tostring(TakeProfit1) + ","
+            _strategy := "Strategy: " + "ManualTrading" + ","
+            _action := "Action: " + "TakeProfitShort"
+            
+            _msg = "{"
+            _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
+                 _symbol + "\\n" +
+                 _exchange + "\\n" +
+                 _timeframe + "\\n" +
+                 _side + "\\n" +
+                 _entry + "\\n" +
+                 _stop_loss + "\\n" +
+                 _take_profit1 + "\\n" +
+                 _strategy + "\\n" +
+                 _action + '"'
+            _msg := _msg + "}"
+            
+            inPosition := false
+            ShortTradeClose := true
+            //alert(_msg, alert.freq_once_per_bar)
+            alert(_msg, alert.freq_once_per_bar_close)
+            
+bgcolor(inPosition == true ? color.new(color.green,60) : na)
+bgcolor(ShortTradeClose == true ? color.new(color.red,60) : na)
+bgcolor(LongTradeClose == true ? color.new(color.red,60) : na)

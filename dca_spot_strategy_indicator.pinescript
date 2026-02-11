@@ -6,10 +6,10 @@ lenema200 = input.int(title = 'EMA 200 Length', defval = 200, minval = 1)
 lenema9 = input.int(title = 'EMA 9 Length', defval = 9, minval = 1)
 rsiLength = input.int(title = 'RSI Length', defval = 14, minval = 1)
 volumeLookback = input.int(title = 'Volume Lookback', defval = 20, minval = 1)
-scoreThresholdBuy = input.int(title = 'Score Threshold for Buy Signal', defval = 4, minval = 1, maxval = 9)
+scoreThresholdBuy = input.int(title = 'Score Threshold for Buy Signal', defval = 5, minval = 1, maxval = 9)
 scoreThresholdSell = input.int(title = 'Score Threshold for Sell Signal', defval = 5, minval = 1, maxval = 9)
 
-leftbar = input.int(title = 'Leftbar', defval = 15, minval = 1, group = 'Pivots')
+leftbar = input.int(title = 'Leftbar', defval = 12, minval = 1, group = 'Pivots')
 rightbar = input.int(title = 'Rightbar', defval = 2, minval = 0, group = 'Pivots')
 pivothighfilter = input.float(title = 'Minimum pivot high', defval = 15, minval = 0, step = 1, group = 'Pivots')
 pivotlowfilter = input.float(title = 'Minimum pivot low', defval = -15, maxval = 0, step = 1, group = 'Pivots')
@@ -206,9 +206,9 @@ plotshape(series = sellSignal, title = 'Sell Signal', style = shape.triangledown
 
 // === Webhook Integration ===
 alertcondition(buySignal, title = 'DCA Buy Signal',
-  message = 'DCA_BUY|BTC|{close}|{emaDistance}|{score}|{myrsi}')
+  message = '{"key": "YOUR_SECRET_KEY_HERE", "type": "trading_bot", "msg": "Username: ALL,\\nAccountType: Standard,\\nExchange: Binance,\\nSymbol: {{ticker}},\\nSide: BUY,\\nEntry: {{close}},\\nScore: ' + str.tostring(score) + ',\\nStrategy: DCA_Spot,\\nAction: OpenLong"}')
 alertcondition(sellSignal, title = 'DCA Sell Signal',
-  message = 'DCA_SELL|BTC|{close}|{emaDistance}|{score}|{myrsi}')
+  message = '{"key": "YOUR_SECRET_KEY_HERE", "type": "trading_bot", "msg": "Username: ALL,\\nAccountType: Standard,\\nExchange: Binance,\\nSymbol: {{ticker}},\\nTakeProfit: {{close}},\\nScore: ' + str.tostring(sellScore) + ',\\nStrategy: DCA_Spot,\\nAction: Sell"}')
 
 // === Debug Plots ===
 //plot(title = 'EMA Distance', series = emaDistance, color = color.new(color.blue, 70), linewidth=2)
