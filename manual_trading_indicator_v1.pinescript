@@ -11,7 +11,7 @@ dispaytp3 = input.bool(defval = false, title="Display Take Profit 3", confirm=tr
 EntryPrice  = input.price(defval=0, title = "Entry Price", confirm=true)
 StopLoss    = input.price(defval=0, title = "Stop Loss", confirm=true)
 TakeProfit1 = input.price(defval=0, title = "Take Profit 1", confirm=true)
-Since       = input.time(defval=timestamp("01 Apr 2022 13:30 +0000"), title = "Trade is valide from", confirm=true)
+Since       = input.time(defval=timestamp("01 Apr 2025 13:30 +0000"), title = "Trade is valide from", confirm=true)
 Username    = input.string(defval="Danyway", title="Username")
 AccountType = input.string(defval="Standard", title="Account Type", options=["Standard", "CopyTrading", "Demo", "TestNet"])
 TakeProfit2 = input.price(0.9801, title = "Take Profit 2")

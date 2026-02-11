@@ -25,7 +25,7 @@ StopLoss    = input.price(defval=0, title = "Stop Loss", confirm=true)
 TakeProfit1 = input.price(defval=0, title = "Take Profit 1", confirm=true, group= 'Take Profits')
 TakeProfit2 = input.price(0.9801, title = "Take Profit 2", group= 'Take Profits')
 TakeProfit3 = input.price(0.9999, title = "Take Profit 3", group= 'Take Profits')
-Since       = input.time(defval=timestamp("01 Jan 2024 13:30 +0000"), title = "Trade is valide from", confirm=true)
+Since       = input.time(defval=timestamp("01 Jan 2026 13:30 +0000"), title = "Trade is valide from", confirm=true)
 AdditionalIndicator1       = input.source(close, "Source Indicator 1", group = "Confluence With indicator(s)",inline = 'indicator1')
 AdditionalIndicator1Enable = input.bool(defval = false, title="Use Indicator1", group = "Confluence With indicator(s)", inline = 'indicator1')
 AdditionalIndicator2       = input.source(close, "Source Indicator 2", group = "Confluence With indicator(s)",inline = 'indicator2')
@@ -34,8 +34,6 @@ AdditionalIndicator2Options = input.string(options = ['Above', 'Below','Crossing
 AdditionalIndicator2Optionsb = input.float(title='value', defval = 0.0,group = "Confluence With indicator(s)", inline = 'indicator2')
 StrategyType = input.string(title = "Strategy Type", options = ['ManualTrading', 'DCA'], defval = 'ManualTrading', inline='StrategyAlert')
 AlertType    = input.string(title = "Alert Type", options = ['alerts', 'trading_bot', 'debug'], defval = 'trading_bot', inline='StrategyAlert')
-Username     = input.string(defval="Danyway", title="Username")
-AccountType  = input.string(defval="Standard", title="Account Type", options=["Standard", "CopyTrading", "Demo", "TestNet"])
 
 Conditions = not AdditionalIndicator1Enable or (AdditionalIndicator1Enable == true and AdditionalIndicator1 != close)
 
@@ -160,9 +158,6 @@ string _take_profit1 = na
 string _strategy = na
 string _action = na
 
-_username = "Username: " + Username + ","
-_accounttype = "AccountType: " + AccountType + ","
-
 LongEntryCrossed = (ta.crossunder(close, EntryPriceMin) or ta.crossunder(low, EntryPriceMin) or ta.crossunder(open, EntryPriceMin) or ta.crossunder(close, EntryPriceMax) or ta.crossunder(low, EntryPriceMax) or ta.crossunder(open, EntryPriceMax))
 ShortEntryCrossed = (ta.crossover(close, EntryPriceMin) or ta.crossover(high, EntryPriceMin) or ta.crossover(open, EntryPriceMin) or ta.crossover(close, EntryPriceMax) or ta.crossover(high, EntryPriceMax) or ta.crossover(open, EntryPriceMax))
 LongStopLossCrossed = (ta.crossunder(close, StopLoss) or ta.crossunder(low, StopLoss) or ta.crossunder(open, StopLoss))
@@ -178,8 +173,6 @@ if time >= Since and barstate.islast
         side := "BUY"
         if EntryPriceMax > close and close > StopLoss
             EntryPriceMax := close
-            //_shortticker = str.replace_all(_ticker, "BINANCE:", "")
-            //_shortticker := str.replace_all(_shortticker, "USDT.P", "USDT")
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
             _exchange = "Exchange: " + _currenExchange + ","
@@ -188,15 +181,13 @@ if time >= Since and barstate.islast
             _entry := "Entry: " + multi_entry + ","
             _stop_loss := "StopLoss: " + str.tostring(StopLoss) + ","
             _take_profit1 := "TakeProfit: " + str.tostring(TakeProfit1) + ","
-            _strategy := "Strategy: " + StrategyType + ","
+            _strategy := "Strategy: " + "ManualTrading" + ","
             _action := "Action: " + "OpenLong"
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' +
-                 _username + "\\n" +
-                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -216,7 +207,6 @@ if time >= Since and barstate.islast
         side := "SELL"
         if EntryPriceMin < close and close < StopLoss
             EntryPriceMin := close
-            //_shortticker = str.replace_all(_ticker, "BINANCE:", "")
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
             _exchange = "Exchange: " + _currenExchange + ","
@@ -232,8 +222,6 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' +
-                 _username + "\\n" +
-                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -253,7 +241,6 @@ if time >= Since and barstate.islast
     if EntryPriceMin > StopLoss and inPosition and not LongTradeClose
         side := "SELL"
         if LongStopLossCrossed
-            //_shortticker = str.replace_all(_ticker, "BINANCE:", "")
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
             _exchange = "Exchange: " + _currenExchange + ","
@@ -269,8 +256,6 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
-                 _username + "\\n" +
-                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -290,7 +275,6 @@ if time >= Since and barstate.islast
     if EntryPriceMin < StopLoss and inPosition and not ShortTradeClose
         side := "BUY"
         if ShortStopLossCrossed
-            //_shortticker = str.replace_all(_ticker, "BINANCE:", "")
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
             _exchange = "Exchange: " + _currenExchange + ","
@@ -306,8 +290,6 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
-                 _username + "\\n" +
-                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -327,7 +309,6 @@ if time >= Since and barstate.islast
     if EntryPriceMin > StopLoss and inPosition and not LongTradeClose
         side := "SELL"
         if LongTakeProfit1Crossed
-            //_shortticker = str.replace_all(_ticker, "BINANCE:", "")
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
             _exchange = "Exchange: " + _currenExchange + ","
@@ -343,8 +324,6 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
-                 _username + "\\n" +
-                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -364,7 +343,6 @@ if time >= Since and barstate.islast
     if EntryPriceMin < StopLoss and inPosition and not ShortTradeClose
         side := "BUY"
         if ShortTakeProfit1Crossed
-            //_shortticker = str.replace_all(_ticker, "BINANCE:", "")
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
             _exchange = "Exchange: " + _currenExchange + ","
@@ -380,8 +358,6 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
-                 _username + "\\n" +
-                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
