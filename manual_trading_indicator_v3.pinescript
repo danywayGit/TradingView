@@ -26,6 +26,8 @@ TakeProfit1 = input.price(defval=0, title = "Take Profit 1", confirm=true, group
 TakeProfit2 = input.price(0.9801, title = "Take Profit 2", group= 'Take Profits')
 TakeProfit3 = input.price(0.9999, title = "Take Profit 3", group= 'Take Profits')
 Since       = input.time(defval=timestamp("01 Jan 2026 13:30 +0000"), title = "Trade is valide from", confirm=true)
+Username    = input.string(defval="Danyway", title="Username", options=["Danyway", "Enzo", "Luca", "ALL"])
+AccountType = input.string(defval="Standard", title="Account Type", options=["Standard", "CopyTrading", "Demo", "TestNet"])
 AdditionalIndicator1       = input.source(close, "Source Indicator 1", group = "Confluence With indicator(s)",inline = 'indicator1')
 AdditionalIndicator1Enable = input.bool(defval = false, title="Use Indicator1", group = "Confluence With indicator(s)", inline = 'indicator1')
 AdditionalIndicator2       = input.source(close, "Source Indicator 2", group = "Confluence With indicator(s)",inline = 'indicator2')
@@ -158,6 +160,10 @@ string _take_profit1 = na
 string _strategy = na
 string _action = na
 
+_username = "Username: " + Username + ","
+_accounttype = "AccountType: " + AccountType + ","
+_exchange = "Exchange: Binance,"
+
 LongEntryCrossed = (ta.crossunder(close, EntryPriceMin) or ta.crossunder(low, EntryPriceMin) or ta.crossunder(open, EntryPriceMin) or ta.crossunder(close, EntryPriceMax) or ta.crossunder(low, EntryPriceMax) or ta.crossunder(open, EntryPriceMax))
 ShortEntryCrossed = (ta.crossover(close, EntryPriceMin) or ta.crossover(high, EntryPriceMin) or ta.crossover(open, EntryPriceMin) or ta.crossover(close, EntryPriceMax) or ta.crossover(high, EntryPriceMax) or ta.crossover(open, EntryPriceMax))
 LongStopLossCrossed = (ta.crossunder(close, StopLoss) or ta.crossunder(low, StopLoss) or ta.crossunder(open, StopLoss))
@@ -175,7 +181,6 @@ if time >= Since and barstate.islast
             EntryPriceMax := close
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
-            _exchange = "Exchange: " + _currenExchange + ","
             _timeframe = "Time Frame: " + _currenttf + ","
             _side := "Side: " + side + ","
             _entry := "Entry: " + multi_entry + ","
@@ -188,6 +193,8 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' +
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -209,7 +216,6 @@ if time >= Since and barstate.islast
             EntryPriceMin := close
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
-            _exchange = "Exchange: " + _currenExchange + ","
             _timeframe = "Time Frame: " + _currenttf + ","
             _side := "Side: " + side + ","
             _entry := "Entry: " + multi_entry + ","
@@ -222,6 +228,8 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' +
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -243,7 +251,6 @@ if time >= Since and barstate.islast
         if LongStopLossCrossed
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
-            _exchange = "Exchange: " + _currenExchange + ","
             _timeframe = "Time Frame: " + _currenttf + ","
             _side := "Side: " + side + ","
             _entry := "Entry: " + multi_entry + ","
@@ -256,6 +263,8 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -277,7 +286,6 @@ if time >= Since and barstate.islast
         if ShortStopLossCrossed
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
-            _exchange = "Exchange: " + _currenExchange + ","
             _timeframe = "Time Frame: " + _currenttf + ","
             _side := "Side: " + side + ","
             _entry := "Entry: " + multi_entry + ","
@@ -290,6 +298,8 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -311,7 +321,6 @@ if time >= Since and barstate.islast
         if LongTakeProfit1Crossed
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
-            _exchange = "Exchange: " + _currenExchange + ","
             _timeframe = "Time Frame: " + _currenttf + ","
             _side := "Side: " + side + ","
             _entry := "Entry: " + multi_entry + ","
@@ -324,6 +333,8 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
@@ -345,7 +356,6 @@ if time >= Since and barstate.islast
         if ShortTakeProfit1Crossed
             _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
             _symbol = "Symbol: " + _shortticker + ","
-            _exchange = "Exchange: " + _currenExchange + ","
             _timeframe = "Time Frame: " + _currenttf + ","
             _side := "Side: " + side + ","
             _entry := "Entry: " + multi_entry + ","
@@ -358,6 +368,8 @@ if time >= Since and barstate.islast
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
             _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
+                 _username + "\\n" +
+                 _accounttype + "\\n" +
                  _symbol + "\\n" +
                  _exchange + "\\n" +
                  _timeframe + "\\n" +
