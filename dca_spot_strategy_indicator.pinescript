@@ -205,10 +205,71 @@ plotshape(series = sellSignal, title = 'Sell Signal', style = shape.triangledown
   location = location.abovebar, color = color.red, size = size.normal)
 
 // === Webhook Integration ===
-alertcondition(buySignal, title = 'DCA Buy Signal',
-  message = '{"key": "YOUR_SECRET_KEY_HERE", "type": "trading_bot", "msg": "Username: ALL,\\nAccountType: Standard,\\nExchange: Binance,\\nSymbol: {{ticker}},\\nSide: BUY,\\nEntry: {{close}},\\nScore: ' + str.tostring(score) + ',\\nStrategy: DCA_Spot,\\nAction: OpenLong"}')
-alertcondition(sellSignal, title = 'DCA Sell Signal',
-  message = '{"key": "YOUR_SECRET_KEY_HERE", "type": "trading_bot", "msg": "Username: ALL,\\nAccountType: Standard,\\nExchange: Binance,\\nSymbol: {{ticker}},\\nTakeProfit: {{close}},\\nScore: ' + str.tostring(sellScore) + ',\\nStrategy: DCA_Spot,\\nAction: Sell"}')
+secretKey = "YOUR_SECRET_KEY_HERE"
+_ticker = syminfo.ticker
+_currenttf = timeframe.period
+
+if buySignal
+    _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
+    _symbol = "Symbol: " + _shortticker + ","
+    _timeframe = "Time Frame: " + _currenttf + ","
+    _side = "Side: BUY,"
+    _entry = "Entry: " + str.tostring(close) + ","
+    _score = "Score: " + str.tostring(score) + ","
+    _username = "Username: ALL,"
+    _accounttype = "AccountType: Standard,"
+    _exchange = "Exchange: Binance,"
+    _strategy = "Strategy: DCA_Spot,"
+    _action = "Action: OpenLong"
+    
+    _msg = "{"
+    _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+    _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+    _msg := _msg + '"' + "msg" + '":' + '"' +
+      _username + "\\n" +
+      _accounttype + "\\n" +
+      _symbol + "\\n" +
+      _exchange + "\\n" +
+      _timeframe + "\\n" +
+      _side + "\\n" +
+      _entry + "\\n" +
+      _score + "\\n" +
+      _strategy + "\\n" +
+      _action + '"'
+    _msg := _msg + "}"
+    
+    alert(_msg, alert.freq_once_per_bar_close)
+
+if sellSignal
+    _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
+    _symbol = "Symbol: " + _shortticker + ","
+    _timeframe = "Time Frame: " + _currenttf + ","
+    _side = "Side: SELL,"
+    _takeprofit = "TakeProfit: " + str.tostring(close) + ","
+    _score = "Score: " + str.tostring(sellScore) + ","
+    _username = "Username: ALL,"
+    _accounttype = "AccountType: Standard,"
+    _exchange = "Exchange: Binance,"
+    _strategy = "Strategy: DCA_Spot,"
+    _action = "Action: Sell"
+    
+    _msg = "{"
+    _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+    _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+    _msg := _msg + '"' + "msg" + '":' + '"' +
+      _username + "\\n" +
+      _accounttype + "\\n" +
+      _symbol + "\\n" +
+      _exchange + "\\n" +
+      _timeframe + "\\n" +
+      _side + "\\n" +
+      _takeprofit + "\\n" +
+      _score + "\\n" +
+      _strategy + "\\n" +
+      _action + '"'
+    _msg := _msg + "}"
+    
+    alert(_msg, alert.freq_once_per_bar_close)
 
 // === Debug Plots ===
 //plot(title = 'EMA Distance', series = emaDistance, color = color.new(color.blue, 70), linewidth=2)
