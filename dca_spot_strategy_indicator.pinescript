@@ -210,7 +210,11 @@ _ticker = syminfo.ticker
 _currenttf = timeframe.period
 
 if buySignal
+    // Replace USDT.P with USDT (for futures), and ensure USD becomes USDT for Binance
     _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
+    // Convert USD to USDT for Binance compatibility (e.g., BTCUSD -> BTCUSDT)
+    if str.contains(_shortticker, "USD") and not str.contains(_shortticker, "USDT")
+        _shortticker := str.replace_all(_shortticker, "USD", "USDT")
     _symbol = "Symbol: " + _shortticker + ","
     _timeframe = "Time Frame: " + _currenttf + ","
     _side = "Side: BUY,"
@@ -241,7 +245,11 @@ if buySignal
     alert(_msg, alert.freq_once_per_bar_close)
 
 if sellSignal
+    // Replace USDT.P with USDT (for futures), and ensure USD becomes USDT for Binance
     _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
+    // Convert USD to USDT for Binance compatibility (e.g., BTCUSD -> BTCUSDT)
+    if str.contains(_shortticker, "USD") and not str.contains(_shortticker, "USDT")
+        _shortticker := str.replace_all(_shortticker, "USD", "USDT")
     _symbol = "Symbol: " + _shortticker + ","
     _timeframe = "Time Frame: " + _currenttf + ","
     _side = "Side: SELL,"
