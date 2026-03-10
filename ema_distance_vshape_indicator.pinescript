@@ -9,9 +9,9 @@ ema200length = input.int(title = 'EMA 200 Length', defval = 200, minval = 1, gro
 ema55length = input.int(title = 'Smoothing EMA Length', defval = 55, minval = 1, group = 'EMA Settings')
 
 leftbar = input.int(title = 'Leftbar', defval = 15, minval = 1, group = 'Pivots')
-rightbar = input.int(title = 'Rightbar', defval = 2, minval = 0, group = 'Pivots')
-pivothighfilter = input.float(title = 'Minimum pivot high', defval = 1.5, minval = 0, step = 0.1, group = 'Pivots')
-pivotlowfilter = input.float(title = 'Maximum pivot low', defval = -1.5, maxval = 0, step = 0.1, group = 'Pivots')
+rightbar = input.int(title = 'Rightbar', defval = 1, minval = 0, group = 'Pivots')
+pivothighfilter = input.float(title = 'Minimum pivot high', defval = 15, minval = 0, step = 0.1, group = 'Pivots')
+pivotlowfilter = input.float(title = 'Maximum pivot low', defval = -15, maxval = 0, step = 0.1, group = 'Pivots')
 
 lookback = input.int(title = 'V-Shape Lookback', defval = 20, minval = 5, group = 'V-Shape Detection')
 
