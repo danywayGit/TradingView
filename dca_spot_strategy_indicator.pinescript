@@ -8,6 +8,7 @@ rsiLength = input.int(title = 'RSI Length', defval = 14, minval = 1)
 volumeLookback = input.int(title = 'Volume Lookback', defval = 20, minval = 1)
 scoreThresholdBuy = input.int(title = 'Score Threshold for Buy Signal', defval = 5, minval = 1, maxval = 9)
 scoreThresholdSell = input.int(title = 'Score Threshold for Sell Signal', defval = 5, minval = 1, maxval = 9)
+AlertType    = input.string(title = 'Alert Type', options = ['alerts', 'trading_bot', 'debug'], defval = 'trading_bot')
 
 leftbar = input.int(title = 'Leftbar', defval = 12, minval = 1, group = 'Pivots')
 rightbar = input.int(title = 'Rightbar', defval = 2, minval = 0, group = 'Pivots')
@@ -228,7 +229,7 @@ if buySignal
     
     _msg = "{"
     _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-    _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+    _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
     _msg := _msg + '"' + "msg" + '":' + '"' +
       _username + "\\n" +
       _accounttype + "\\n" +
@@ -263,7 +264,7 @@ if sellSignal
     
     _msg = "{"
     _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-    _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+    _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
     _msg := _msg + '"' + "msg" + '":' + '"' +
       _username + "\\n" +
       _accounttype + "\\n" +

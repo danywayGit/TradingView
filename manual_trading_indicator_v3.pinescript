@@ -191,7 +191,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' +
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -226,7 +226,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' +
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -261,7 +261,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -296,7 +296,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -331,7 +331,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -366,7 +366,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + AlertType + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
