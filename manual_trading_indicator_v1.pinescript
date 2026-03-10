@@ -14,6 +14,7 @@ TakeProfit1 = input.price(defval=0, title = "Take Profit 1", confirm=true)
 Since       = input.time(defval=timestamp("01 Apr 2025 13:30 +0000"), title = "Trade is valide from", confirm=true)
 Username    = input.string(defval="Danyway", title="Username", options=["Danyway", "Enzo", "Luca", "ALL"])
 AccountType = input.string(defval="Standard", title="Account Type", options=["Standard", "CopyTrading", "Demo", "TestNet"])
+AlertType   = input.string(title = "Alert Type", options = ['alerts', 'trading_bot', 'debug'], defval = 'trading_bot')
 TakeProfit2 = input.price(0.9801, title = "Take Profit 2")
 TakeProfit3 = input.price(0.9999, title = "Take Profit 3")
 
@@ -100,7 +101,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -136,7 +137,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -173,7 +174,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -210,7 +211,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -247,7 +248,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
@@ -284,7 +285,7 @@ if time >= Since and barstate.islast
             
             _msg = "{"
             _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
-            _msg := _msg + '"' + "type" + '":' + '"' + "trading_bot" + '",'
+            _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
             _msg := _msg + '"' + "msg" + '":' + '"' + 
                  _username + "\\n" +
                  _accounttype + "\\n" +
