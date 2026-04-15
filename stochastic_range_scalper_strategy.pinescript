@@ -1,0 +1,190 @@
+//@version=6
+// TF: 3m-5m | Type: Long/Short | Target: 1:1.2 R/R
+//
+// Description:
+//   Stochastic Range Scalper. Identifies low-volatility, range-bound markets using
+//   Bollinger Band width as a squeeze filter, then enters on Stochastic %K/%D crossovers
+//   near the extreme bands — buying near the lower BB and selling near the upper BB.
+//
+// Main idea:     Trade mean-reversion inside a BB squeeze. Enter when Stochastic reverses
+//               at an extreme (overbought / oversold) and price is near the band edge.
+// Max hold bars: NA — exits are fully managed by SL and TP orders.
+// Stop loss:     Three modes (selectable):
+//               - Percent: fixed % from entry (default 0.6%).
+//               - ATR: entry ± ATR × multiplier (default 1.0×).
+//               - Calculated: ATR stop combined with recent swing high/low + ATR buffer.
+// Take profit:   Three modes (selectable):
+//               - Percent: fixed % target from entry (default 0.75%).
+//               - RR: entry ± SL distance × R:R ratio (default 1.2).
+//               - Calculated: BB basis (midline) or opposite band as the target.
+
+strategy('HF2: Stoch Range Scalper v6', overlay = true, initial_capital = 100000,
+  default_qty_type = strategy.fixed, default_qty_value = 1, currency = 'USD',
+  commission_type = strategy.commission.percent, commission_value = 0.02,
+  slippage = 2, pyramiding = 0, process_orders_on_close = true)
+
+// === POSITION SIZING ===
+use_risk_sizing = input.bool(true, 'Use Risk-Based Position Sizing', group = '=== Position Sizing ===')
+risk_per_trade = input.float(1.0, 'Risk % per Trade', minval = 0.1, maxval = 5.0, step = 0.1, group = '=== Position Sizing ===')
+fixed_qty = input.float(1.0, 'Fixed Qty Fallback', minval = 0.001, step = 0.001, group = '=== Position Sizing ===')
+max_position_pct = input.float(100.0, 'Max Position % of Equity', minval = 1.0, maxval = 100.0, step = 1.0, group = '=== Position Sizing ===')
+
+// === RISK MANAGEMENT ===
+sl_mode = input.string('ATR', 'Stop Loss Mode', options = ['Percent', 'ATR', 'Calculated'], group = '=== Risk Management ===')
+sl_pct = input.float(0.6, 'SL %', minval = 0.1, maxval = 5.0, step = 0.1, group = '=== Risk Management ===')
+atr_len = input.int(10, 'ATR Length', minval = 1, maxval = 100, group = '=== Risk Management ===')
+sl_atr_mult = input.float(1.0, 'SL ATR Multiplier', minval = 0.1, maxval = 10.0, step = 0.1, group = '=== Risk Management ===')
+calc_sl_lookback = input.int(5, 'Calculated SL Lookback', minval = 1, maxval = 50, group = '=== Risk Management ===')
+calc_sl_atr_buffer = input.float(0.25, 'Calculated SL ATR Buffer', minval = 0.0, maxval = 5.0, step = 0.05, group = '=== Risk Management ===')
+
+tp_mode = input.string('RR', 'Take Profit Mode', options = ['Percent', 'RR', 'Calculated'], group = '=== Risk Management ===')
+tp_pct = input.float(0.75, 'TP %', minval = 0.1, maxval = 10.0, step = 0.05, group = '=== Risk Management ===')
+tp_rr_ratio = input.float(1.2, 'TP Risk:Reward Ratio', minval = 0.5, maxval = 10.0, step = 0.1, group = '=== Risk Management ===')
+calc_tp_target = input.string('Basis', 'Calculated TP Target', options = ['Basis', 'Opposite Band'], group = '=== Risk Management ===')
+
+// === SETUP ===
+allow_long = input.bool(true, 'Allow Long', group = '=== Setup ===')
+allow_short = input.bool(true, 'Allow Short', group = '=== Setup ===')
+bb_length = input.int(20, 'BB Length', minval = 1, maxval = 200, group = '=== Setup ===')
+bb_mult = input.float(2.0, 'BB Multiplier', minval = 0.1, maxval = 10.0, step = 0.1, group = '=== Setup ===')
+bb_width_min = input.float(0.08, 'BB Width Min', minval = 0.0, maxval = 1.0, step = 0.01, group = '=== Setup ===')
+bb_width_max = input.float(0.15, 'BB Width Max', minval = 0.0, maxval = 1.0, step = 0.01, group = '=== Setup ===')
+stoch_k = input.int(14, 'Stoch %K', minval = 1, maxval = 100, group = '=== Setup ===')
+stoch_d = input.int(3, 'Stoch %D', minval = 1, maxval = 20, group = '=== Setup ===')
+stoch_smooth = input.int(3, 'Stoch Smooth', minval = 1, maxval = 20, group = '=== Setup ===')
+
+// === TIME FILTERS ===
+trade_mon = input.bool(true, 'Monday', group = '=== Time Filters ===')
+trade_tue = input.bool(true, 'Tuesday', group = '=== Time Filters ===')
+trade_wed = input.bool(true, 'Wednesday', group = '=== Time Filters ===')
+trade_thu = input.bool(true, 'Thursday', group = '=== Time Filters ===')
+trade_fri = input.bool(true, 'Friday', group = '=== Time Filters ===')
+trade_sat = input.bool(false, 'Saturday', group = '=== Time Filters ===')
+trade_sun = input.bool(false, 'Sunday', group = '=== Time Filters ===')
+hour_start = input.int(0, 'Start Hour (UTC)', minval = 0, maxval = 23, group = '=== Time Filters ===')
+hour_end = input.int(23, 'End Hour (UTC)', minval = 0, maxval = 23, group = '=== Time Filters ===')
+
+// === VISUALS ===
+show_trade_lines = input.bool(true, 'Show Trade Lines', group = '=== Visuals ===')
+trade_line_bars = input.int(15, 'Trade Line Bars', minval = 1, maxval = 100, group = '=== Visuals ===')
+
+// === INDICATORS ===
+basis = ta.sma(close, bb_length)
+bb_dev = bb_mult * ta.stdev(close, bb_length)
+upper_bb = basis + bb_dev
+lower_bb = basis - bb_dev
+bb_width = basis != 0 ? (upper_bb - lower_bb) / basis : 0.0
+
+stoch_raw = ta.stoch(close, high, low, stoch_k)
+stoch_k_line = ta.sma(stoch_raw, stoch_d)
+stoch_d_line = ta.sma(stoch_k_line, stoch_smooth)
+atr_val = ta.atr(atr_len)
+
+// === FILTERS ===
+dow = dayofweek
+allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
+utc_hour = hour(time, 'UTC')
+allow_hour = utc_hour >= hour_start and utc_hour <= hour_end
+range_bound = bb_width > bb_width_min and bb_width < bb_width_max
+allow_trade = allow_day and allow_hour and range_bound
+
+// === HELPERS ===
+f_long_stop(entry) =>
+    percent_stop = entry * (1 - sl_pct / 100)
+    atr_stop = entry - atr_val * sl_atr_mult
+    calc_stop = math.min(atr_stop, ta.lowest(low, calc_sl_lookback) - atr_val * calc_sl_atr_buffer)
+    sl_mode == 'Percent' ? percent_stop : sl_mode == 'ATR' ? atr_stop : calc_stop
+
+f_short_stop(entry) =>
+    percent_stop = entry * (1 + sl_pct / 100)
+    atr_stop = entry + atr_val * sl_atr_mult
+    calc_stop = math.max(atr_stop, ta.highest(high, calc_sl_lookback) + atr_val * calc_sl_atr_buffer)
+    sl_mode == 'Percent' ? percent_stop : sl_mode == 'ATR' ? atr_stop : calc_stop
+
+f_long_tp(entry, stop_distance) =>
+    percent_tp = entry * (1 + tp_pct / 100)
+    rr_tp = entry + stop_distance * tp_rr_ratio
+    calc_tp = calc_tp_target == 'Basis' ? basis : upper_bb
+    selected_tp = tp_mode == 'Percent' ? percent_tp : tp_mode == 'RR' ? rr_tp : calc_tp
+    math.max(selected_tp, entry + syminfo.mintick)
+
+f_short_tp(entry, stop_distance) =>
+    percent_tp = entry * (1 - tp_pct / 100)
+    rr_tp = entry - stop_distance * tp_rr_ratio
+    calc_tp = calc_tp_target == 'Basis' ? basis : lower_bb
+    selected_tp = tp_mode == 'Percent' ? percent_tp : tp_mode == 'RR' ? rr_tp : calc_tp
+    math.min(selected_tp, entry - syminfo.mintick)
+
+// === POSITION SIZING ===
+risk_amount = strategy.equity * risk_per_trade / 100
+max_qty = (strategy.equity * max_position_pct / 100) / close
+long_stop_preview = f_long_stop(close)
+short_stop_preview = f_short_stop(close)
+long_stop_distance = math.max(math.abs(close - long_stop_preview), syminfo.mintick)
+short_stop_distance = math.max(math.abs(close - short_stop_preview), syminfo.mintick)
+long_qty = use_risk_sizing ? math.max(math.min(risk_amount / long_stop_distance, max_qty), 0) : fixed_qty
+short_qty = use_risk_sizing ? math.max(math.min(risk_amount / short_stop_distance, max_qty), 0) : fixed_qty
+
+// === ENTRIES ===
+long_cond = allow_long and allow_trade and stoch_k_line < 20 and ta.crossover(stoch_k_line, stoch_d_line) and close < lower_bb * 1.01
+short_cond = allow_short and allow_trade and stoch_k_line > 80 and ta.crossunder(stoch_k_line, stoch_d_line) and close > upper_bb * 0.99
+
+if long_cond and strategy.position_size == 0
+    strategy.entry('Long', strategy.long, qty = long_qty)
+
+if short_cond and strategy.position_size == 0
+    strategy.entry('Short', strategy.short, qty = short_qty)
+
+// === ACTIVE TRADE LEVELS ===
+var float active_entry = na
+var float active_stop = na
+var float active_tp = na
+
+if strategy.position_size == 0
+    active_entry := na
+    active_stop := na
+    active_tp := na
+
+if strategy.position_size > 0 and strategy.position_size[1] <= 0
+    active_entry := strategy.position_avg_price
+    active_stop := f_long_stop(active_entry)
+    long_trade_risk = math.max(math.abs(active_entry - active_stop), syminfo.mintick)
+    active_tp := f_long_tp(active_entry, long_trade_risk)
+    if show_trade_lines
+        line.new(bar_index, active_entry, bar_index + trade_line_bars, active_entry,
+          xloc = xloc.bar_index, extend = extend.none, color = color.white, width = 2)
+        line.new(bar_index, active_stop, bar_index + trade_line_bars, active_stop,
+          xloc = xloc.bar_index, extend = extend.none, color = color.red, width = 2)
+        line.new(bar_index, active_tp, bar_index + trade_line_bars, active_tp,
+          xloc = xloc.bar_index, extend = extend.none, color = color.green, width = 2)
+
+if strategy.position_size < 0 and strategy.position_size[1] >= 0
+    active_entry := strategy.position_avg_price
+    active_stop := f_short_stop(active_entry)
+    short_trade_risk = math.max(math.abs(active_entry - active_stop), syminfo.mintick)
+    active_tp := f_short_tp(active_entry, short_trade_risk)
+    if show_trade_lines
+        line.new(bar_index, active_entry, bar_index + trade_line_bars, active_entry,
+          xloc = xloc.bar_index, extend = extend.none, color = color.white, width = 2)
+        line.new(bar_index, active_stop, bar_index + trade_line_bars, active_stop,
+          xloc = xloc.bar_index, extend = extend.none, color = color.red, width = 2)
+        line.new(bar_index, active_tp, bar_index + trade_line_bars, active_tp,
+          xloc = xloc.bar_index, extend = extend.none, color = color.green, width = 2)
+
+if strategy.position_size > 0 and not na(active_stop) and not na(active_tp)
+    strategy.exit('Long Exit', 'Long', stop = active_stop, limit = active_tp)
+
+if strategy.position_size < 0 and not na(active_stop) and not na(active_tp)
+    strategy.exit('Short Exit', 'Short', stop = active_stop, limit = active_tp)
+
+// === VISUALS ===
+plot(basis, 'BB Basis', color = color.orange)
+plot(upper_bb, 'Upper BB', color = color.new(color.red, 40))
+plot(lower_bb, 'Lower BB', color = color.new(color.green, 40))
+plotshape(long_cond and strategy.position_size == 0, 'Long Signal', shape.triangleup, location.belowbar, color.green, size = size.small)
+plotshape(short_cond and strategy.position_size == 0, 'Short Signal', shape.triangledown, location.abovebar, color.red, size = size.small)
+
+// === DEBUG ===
+// plot(bb_width, 'BB Width', color = color.blue, display = display.pane)
+// plot(stoch_k_line, 'Stoch K', color = color.aqua, display = display.pane)
+// plot(stoch_d_line, 'Stoch D', color = color.fuchsia, display = display.pane)

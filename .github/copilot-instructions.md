@@ -60,6 +60,7 @@ Alert messages use **JSON structure** for trading bot integration:
 
 ### PineScript Conventions
 - Use `@version=6` (current standard)
+- Keep `shorttitle` at **10 characters maximum**
 - Group related inputs with `group` parameter
 - Store state variables with `var` keyword for bar-to-bar persistence
 - Calculate `emaDistance` as percentage: `(close - ema200) / ema200 * 100`

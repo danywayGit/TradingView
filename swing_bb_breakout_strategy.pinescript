@@ -1,0 +1,63 @@
+pinescript
+//@version=5
+// SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
+// SWING #2: Bollinger Squeeze Breakout (Volatility Expansion)
+// TF: 4H | Type: Long/Short | Target: 1:2.5 R/R
+strategy("SWING2: BB Squeeze Breakout - Risk Based", overlay=true, initial_capital=100000, currency="USD")
+
+// === INPUTS ===
+risk_per_trade = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=5)
+bb_length = input.int(20, "BB Length")
+bb_mult = input.float(2.0, "BB Mult")
+squeeze_length = input.int(5, "Squeeze Bars")
+macd_fast = input.int(12, "MACD Fast")
+macd_slow = input.int(26, "MACD Slow")
+macd_signal = input.int(9, "MACD Signal")
+
+trade_mon = input.bool(true, "Monday")
+trade_tue = input.bool(true, "Tuesday")
+trade_wed = input.bool(true, "Wednesday")
+trade_thu = input.bool(true, "Thursday")
+trade_fri = input.bool(true, "Friday")
+trade_sat = input.bool(true, "Saturday")
+trade_sun = input.bool(true, "Sunday")
+
+// === INDICATORS ===
+basis = ta.sma(close, bb_length)
+dev = bb_mult * ta.stdev(close, bb_length)
+upper_bb = basis + dev
+lower_bb = basis - dev
+bb_width = (upper_bb - lower_bb) / basis
+
+[macd_line, signal_line, hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
+atr = ta.atr(14)
+
+// === SQUEEZE DETECTION ===
+squeeze = bb_width < ta.lowest(bb_width, squeeze_length)[1]
+was_squeezed = ta.barssince(squeeze) <= squeeze_length
+
+// === FILTERS ===
+dow = dayofweek
+allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
+
+// === POSITION SIZING ===
+risk_amount = strategy.equity * risk_per_trade / 100
+stop_dist = atr * 2.5
+qty = risk_amount / stop_dist
+
+// === ENTRIES ===
+long_cond = was_squeezed and close > upper_bb and macd_line > signal_line and allow_day
+short_cond = was_squeezed and close < lower_bb and macd_line < signal_line and allow_day
+
+// === EXECUTION ===
+if long_cond and strategy.position_size == 0
+    strategy.entry("Long", strategy.long, qty=qty)
+    strategy.exit("Exit", "Long", loss=close - stop_dist, profit=close + (stop_dist * 2.5))
+
+if short_cond and strategy.position_size == 0
+    strategy.entry("Short", strategy.short, qty=qty)
+[08.04.2026 04:30] TVRemix: strategy.exit("Exit", "Short", loss=close + stop_dist, profit=close - (stop_dist * 2.5))
+
+plot(upper_bb, "Upper BB", color.red)
+plot(lower_bb, "Lower BB", color.green)
+plot(basis, "Basis", color.gray)

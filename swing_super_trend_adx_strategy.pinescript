@@ -1,0 +1,60 @@
+pinescript
+//@version=5
+// SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
+// SWING #3: Supertrend + ADX Power (Strong Trend)
+// TF: 1H-4H | Type: Long/Short | Target: Trail by Supertrend
+
+strategy("SWING3: Supertrend + ADX - Risk Based", overlay=true, initial_capital=100000, currency="USD")
+
+// === INPUTS ===
+risk_per_trade = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=5)
+st_period = input.int(10, "Supertrend Period")
+st_factor = input.float(3.0, "Supertrend Factor")
+adx_period = input.int(14, "ADX Period")
+adx_threshold = input.int(25, "ADX Threshold")
+ema_filter = input.int(50, "EMA Filter")
+
+trade_mon = input.bool(true, "Monday")
+trade_tue = input.bool(true, "Tuesday")
+trade_wed = input.bool(true, "Wednesday")
+trade_thu = input.bool(true, "Thursday")
+trade_fri = input.bool(true, "Friday")
+trade_sat = input.bool(true, "Saturday")
+trade_sun = input.bool(true, "Sunday")
+
+// === INDICATORS ===
+[st_dir, st_level] = ta.supertrend(st_factor, st_period)
+adx = ta.adx(high, low, close, adx_period)
+ema_filt = ta.ema(close, ema_filter)
+atr = ta.atr(14)
+
+// === FILTERS ===
+dow = dayofweek
+allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
+
+// === POSITION SIZING ===
+risk_amount = strategy.equity * risk_per_trade / 100
+stop_dist = atr * 2.5
+qty = risk_amount / stop_dist
+
+// === ENTRIES ===
+st_bull = st_dir < 0
+st_bear = st_dir > 0
+adx_strong = adx > adx_threshold
+
+long_cond = st_bull and adx_strong and close > ema_filt and allow_day
+short_cond = st_bear and adx_strong and close < ema_filt and allow_day
+
+// === EXECUTION ===
+if long_cond and strategy.position_size == 0
+    strategy.entry("Long", strategy.long, qty=qty)
+
+if short_cond and strategy.position_size == 0
+    strategy.entry("Short", strategy.short, qty=qty)
+
+// Trailing exit
+strategy.close("Long", when=st_bear)
+strategy.close("Short", when=st_bull)
+
+plot(st_level, "Supertrend", color=st_bull ? color.green : color.red)
+plot(ema_filt, "EMA Filter", color.blue)

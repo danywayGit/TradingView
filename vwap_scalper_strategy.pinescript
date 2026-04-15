@@ -1,0 +1,231 @@
+//@version=6
+// TF: 5m | Type: Long/Short | Target: 1:1.5 R/R
+//
+// Description:
+//   VWAP Mean-Reversion Scalper. Enters long (or short) when price stretches away from the
+//   intraday VWAP by a configurable deviation % and RSI confirms oversold / overbought
+//   conditions. Entry is intentionally delayed by N bars after the signal cluster starts to
+//   avoid jumping in too early on the first candle of the move.
+//
+// Main idea:     Buy dips below VWAP, sell when price reverts back to VWAP.
+// Max hold bars: 24 bars (configurable — acts as a timeout exit if price never reverts).
+// Stop loss:     Fixed % below / above entry price (default 1.0%). Optionally moves to
+//               breakeven once the trade reaches +0.3% in profit.
+// Take profit:   Default = VWAP reversion (price crossing back through VWAP).
+//               Optional R:R mode: fixed target at entry ± (SL distance × ratio, default 1.5).
+//               When R:R TP is enabled, VWAP exit is disabled so the ratio controls the exit.
+
+
+strategy('HF1: VWAP Scalp v3', overlay = true, initial_capital = 100000,
+  default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
+  currency = 'USD', commission_type = strategy.commission.percent,
+  commission_value = 0.02, slippage = 2, process_orders_on_close = true)
+
+// === INPUTS ===
+sl_pct = input.float(1.0, 'Stop Loss %', minval = 0.1, maxval = 5.0, step = 0.1, group = "=== Risk Management ===")
+max_hold_bars = input.int(24, 'Max Hold Bars', minval = 1, maxval = 200, group = "=== Risk Management ===")
+max_daily_trades = input.int(2, 'Max Trades Per Day', minval = 1, maxval = 20, group = "=== Risk Management ===")
+use_breakeven = input.bool(true, 'Use Breakeven Stop', group = "=== Risk Management ===")
+be_trigger_pct = input.float(0.3, 'Breakeven Trigger %', minval = 0.1, maxval = 2.0, step = 0.1, group = "=== Risk Management ===")
+use_tp = input.bool(false, 'Use Take Profit (R:R)', group = "=== Risk Management ===")
+tp_rr_ratio = input.float(1.5, 'TP Risk:Reward Ratio', minval = 0.5, maxval = 10.0, step = 0.5, group = "=== Risk Management ===")
+allow_long = input.bool(true, 'Allow Long', group = "=== Direction ===")
+allow_short = input.bool(false, 'Allow Short', group = "=== Direction ===")
+rsi_period = input.int(7, 'RSI Period', group = "=== Indicators ===")
+rsi_long = input.int(35, 'RSI Long Threshold', group = "=== Indicators ===")
+rsi_short = input.int(65, 'RSI Short Threshold', group = "=== Indicators ===")
+vwap_dev = input.float(0.3, 'VWAP Deviation %', minval = 0.01, maxval = 5.0, step = 0.01, group = "=== Indicators ===")
+ema_len = input.int(50, 'Trend EMA Length', minval = 10, maxval = 200, group = "=== Trend Filter ===")
+use_trend = input.bool(true, 'Use Trend Filter', group = "=== Trend Filter ===")
+trend_lookback = input.int(25, 'Trend Lookback Bars', minval = 5, maxval = 200, group = "=== Trend Filter ===")
+trend_drop_pct = input.float(-1.0, 'Max EMA Drop %', minval = -5.0, maxval = 0.0, step = 0.1, group = "=== Trend Filter ===")
+entry_delay = input.int(4, 'Entry Delay Bars', minval = 0, maxval = 20, group = "=== Filters ===")
+cooldown_bars = input.int(48, 'Cooldown Bars After Trade', minval = 0, maxval = 200, group = "=== Filters ===")
+show_trade_lines = input.bool(true, 'Show Trade Lines', group = "=== Visuals ===")
+trade_line_bars = input.int(45, 'Trade Line Bars', minval = 1, maxval = 100, group = "=== Visuals ===")
+
+// Time Filters
+trade_mon = input.bool(true, 'Monday', group = "=== Time Filters ===")
+trade_tue = input.bool(true, 'Tuesday', group = "=== Time Filters ===")
+trade_wed = input.bool(true, 'Wednesday', group = "=== Time Filters ===")
+trade_thu = input.bool(true, 'Thursday', group = "=== Time Filters ===")
+trade_fri = input.bool(true, 'Friday', group = "=== Time Filters ===")
+trade_sat = input.bool(false, 'Saturday', group = "=== Time Filters ===")
+trade_sun = input.bool(false, 'Sunday', group = "=== Time Filters ===")
+hour_start = input.int(0, 'Start Hour (UTC)', minval = 0, maxval = 23, group = "=== Time Filters ===")
+hour_end = input.int(23, 'End Hour (UTC)', minval = 0, maxval = 23, group = "=== Time Filters ===")
+use_hour_filter = input.bool(true, 'Avoid Weak Hours',
+  tooltip = 'Skips H5,6,10,12,14,19,23 UTC', group = "=== Time Filters ===")
+
+// === INDICATORS ===
+vwap_val = ta.vwap(hlc3)
+rsi = ta.rsi(close, rsi_period)
+ema_trend = ta.ema(close, ema_len)
+dev = vwap_dev / 100
+
+// === FILTERS ===
+dow = dayofweek
+allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
+utc_hour = hour(time, "UTC")
+allow_hour = utc_hour >= hour_start and utc_hour <= hour_end
+weak_hour = utc_hour == 5 or utc_hour == 6 or utc_hour == 10
+  or utc_hour == 12 or utc_hour == 14 or utc_hour == 19 or utc_hour == 23
+allow_trade = allow_day and allow_hour and (use_hour_filter ? not weak_hour : true)
+
+ema_chg_pct = (ema_trend - ema_trend[trend_lookback]) / ema_trend[trend_lookback] * 100
+not_crashing = ema_chg_pct > trend_drop_pct
+not_mooning = ema_chg_pct < math.abs(trend_drop_pct)
+trend_long = use_trend ? not_crashing : true
+trend_short = use_trend ? not_mooning : true
+
+// Cooldown: prevent cascading re-entries
+var int bars_since_exit = cooldown_bars
+if strategy.position_size == 0 and strategy.position_size[1] != 0
+    bars_since_exit := 0
+if strategy.position_size == 0
+    bars_since_exit += 1
+allow_cooldown = bars_since_exit > cooldown_bars
+
+// Daily trade limit
+var int daily_trade_count = 0
+if ta.change(time("D")) != 0
+    daily_trade_count := 0
+allow_daily = daily_trade_count < max_daily_trades
+
+// === RAW SIGNAL DETECTION ===
+raw_long = close < vwap_val * (1 - dev) and rsi < rsi_long and allow_trade and trend_long
+raw_short = close > vwap_val * (1 + dev) and rsi > rsi_short and allow_trade and trend_short
+
+// === DELAYED ENTRY ===
+// Track when signal cluster starts, enter N bars later
+var int long_cluster_start = 0
+var int short_cluster_start = 0
+var bool long_entry_pending = false
+var bool short_entry_pending = false
+
+if raw_long and not raw_long[1]
+    long_cluster_start := bar_index
+    long_entry_pending := true
+if raw_short and not raw_short[1]
+    short_cluster_start := bar_index
+    short_entry_pending := true
+
+if not raw_long and bar_index - long_cluster_start > entry_delay + 3
+    long_entry_pending := false
+if not raw_short and bar_index - short_cluster_start > entry_delay + 3
+    short_entry_pending := false
+
+long_cluster_age = bar_index - long_cluster_start
+short_cluster_age = bar_index - short_cluster_start
+
+long_cond = long_entry_pending and long_cluster_age >= entry_delay
+  and long_cluster_age <= entry_delay + 2 and allow_cooldown and allow_daily
+  and close < vwap_val * (1 - dev) and allow_trade and trend_long
+short_cond = short_entry_pending and short_cluster_age >= entry_delay
+  and short_cluster_age <= entry_delay + 2 and allow_cooldown and allow_daily
+  and close > vwap_val * (1 + dev) and allow_trade and trend_short
+
+if long_cond
+    long_entry_pending := false
+if short_cond
+    short_entry_pending := false
+
+// === STOPS ===
+long_sl = close * (1 - sl_pct / 100)
+short_sl = close * (1 + sl_pct / 100)
+var float entry_tp = na
+if strategy.position_size == 0
+    entry_tp := na
+if use_tp and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    entry_tp := strategy.position_avg_price * (1 + sl_pct / 100 * tp_rr_ratio)
+if use_tp and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    entry_tp := strategy.position_avg_price * (1 - sl_pct / 100 * tp_rr_ratio)
+
+// === EXECUTION: ENTRY ===
+var int bars_in_trade = 0
+if strategy.position_size != 0
+    bars_in_trade += 1
+else
+    bars_in_trade := 0
+
+if allow_long and long_cond and strategy.position_size == 0
+    strategy.entry('Long', strategy.long)
+    strategy.exit('SL Long', 'Long', stop = long_sl, limit = entry_tp)
+    daily_trade_count += 1
+
+if allow_short and short_cond and strategy.position_size == 0
+    strategy.entry('Short', strategy.short)
+    strategy.exit('SL Short', 'Short', stop = short_sl, limit = entry_tp)
+    daily_trade_count += 1
+
+// === BREAKEVEN STOP ===
+var bool breakeven_hit = false
+if strategy.position_size == 0
+    breakeven_hit := false
+if use_breakeven and strategy.position_size > 0 and not breakeven_hit
+    if close >= strategy.position_avg_price * (1 + be_trigger_pct / 100)
+        strategy.exit('SL Long', 'Long', stop = strategy.position_avg_price, limit = entry_tp)
+        breakeven_hit := true
+if use_breakeven and strategy.position_size < 0 and not breakeven_hit
+    if close <= strategy.position_avg_price * (1 - be_trigger_pct / 100)
+        strategy.exit('SL Short', 'Short', stop = strategy.position_avg_price, limit = entry_tp)
+        breakeven_hit := true
+
+// === EXIT: VWAP Mean Reversion or Timeout ===
+vwap_long_exit = not use_tp and strategy.position_size > 0 and close > vwap_val
+vwap_short_exit = not use_tp and strategy.position_size < 0 and close < vwap_val
+timeout_exit = bars_in_trade >= max_hold_bars
+
+if vwap_long_exit or (timeout_exit and strategy.position_size > 0)
+    strategy.close('Long', comment = vwap_long_exit ? 'VWAP' : 'Timeout')
+if vwap_short_exit or (timeout_exit and strategy.position_size < 0)
+    strategy.close('Short', comment = vwap_short_exit ? 'VWAP' : 'Timeout')
+
+if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    long_entry_price = strategy.position_avg_price
+    long_sl_price = long_entry_price * (1 - sl_pct / 100)
+    long_tp_price = long_entry_price * (1 + sl_pct / 100 * tp_rr_ratio)
+    line.new(bar_index, long_entry_price, bar_index + trade_line_bars, long_entry_price,
+      xloc = xloc.bar_index, extend = extend.none, color = color.white, width = 2)
+    line.new(bar_index, long_sl_price, bar_index + trade_line_bars, long_sl_price,
+      xloc = xloc.bar_index, extend = extend.none, color = color.red, width = 2)
+    line.new(bar_index, long_tp_price, bar_index + trade_line_bars, long_tp_price,
+      xloc = xloc.bar_index, extend = extend.none, color = color.green, width = 2)
+
+if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    short_entry_price = strategy.position_avg_price
+    short_sl_price = short_entry_price * (1 + sl_pct / 100)
+    short_tp_price = short_entry_price * (1 - sl_pct / 100 * tp_rr_ratio)
+    line.new(bar_index, short_entry_price, bar_index + trade_line_bars, short_entry_price,
+      xloc = xloc.bar_index, extend = extend.none, color = color.white, width = 2)
+    line.new(bar_index, short_sl_price, bar_index + trade_line_bars, short_sl_price,
+      xloc = xloc.bar_index, extend = extend.none, color = color.red, width = 2)
+    line.new(bar_index, short_tp_price, bar_index + trade_line_bars, short_tp_price,
+      xloc = xloc.bar_index, extend = extend.none, color = color.green, width = 2)
+
+// === VISUAL MARKERS ===
+plotshape(long_cond and allow_long and strategy.position_size == 0, 'Long Signal',
+  shape.triangleup, location.belowbar, color.green, size = size.small)
+plotshape(short_cond and allow_short and strategy.position_size == 0, 'Short Signal',
+  shape.triangledown, location.abovebar, color.red, size = size.small)
+
+// === PLOTS ===
+plot(vwap_val, 'VWAP', color = color.orange)
+plot(use_trend ? ema_trend : na, 'Trend EMA', color = color.gray)
+plot(vwap_val * (1 - dev), 'VWAP Lower', color = color.new(color.green, 70))
+plot(vwap_val * (1 + dev), 'VWAP Upper', color = color.new(color.red, 70))
+
+// === DEBUG (uncomment to diagnose) ===
+// plot(rsi, 'RSI', color = color.purple, display = display.pane)
+// plot(ema_chg_pct, 'EMA Change %', color = color.blue, display = display.pane)
+// plot(trend_drop_pct, 'Crash Threshold', color = color.red, display = display.pane)
+// plot(bars_since_exit, 'Bars Since Exit', color = color.gray, display = display.pane)
+// plot(allow_trade ? 1 : 0, 'Time OK', color = color.green, display = display.pane)
+// plot(trend_long ? 1 : 0, 'Trend Long OK', color = color.teal, display = display.pane)
+// plot(trend_short ? 1 : 0, 'Trend Short OK', color = color.orange, display = display.pane)
+// plot(raw_long ? 1 : 0, 'Raw Long', color = color.lime, display = display.pane)
+// plot(raw_short ? 1 : 0, 'Raw Short', color = color.fuchsia, display = display.pane)
+// plot(long_cond ? 1 : 0, 'Long Entry', color = color.green, display = display.pane)
+// plot(short_cond ? 1 : 0, 'Short Entry', color = color.red, display = display.pane)
+// plot(long_cluster_age, 'Long Cluster Age', color = color.aqua, display = display.pane)
+// plot(bars_in_trade, 'Bars In Trade', color = color.yellow, display = display.pane)

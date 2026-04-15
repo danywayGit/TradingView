@@ -1,0 +1,248 @@
+//@version=6
+indicator(title = 'Aggressive Pullback Indicator', shorttitle = 'AggrPB_Ind', overlay = true, max_labels_count = 500)
+
+// === Input Parameters ===
+emaLength = input.int(title = 'EMA Length', defval = 20, minval = 1, group = 'Trend')
+ema200Length = input.int(title = 'EMA 200 Length', defval = 200, minval = 1, group = 'Trend')
+showEma = input.bool(title = 'Show EMA', defval = true, group = 'Trend')
+
+atrPeriod = input.int(title = 'ATR Period', defval = 14, minval = 1, group = 'Risk Management')
+stopMultiplier = input.float(title = 'Stop Size Multiplier (ATR)', defval = 2.0, minval = 0.1, step = 0.1, group = 'Risk Management')
+rrRatio = input.float(title = 'Risk/Reward Ratio', defval = 2.0, minval = 0.1, step = 0.1, group = 'Risk Management')
+
+AlertType = input.string(title = 'Alert Type', options = ['alerts', 'trading_bot', 'debug'], defval = 'trading_bot', group = 'Alerts')
+
+tradeDirection = input.string(title = 'Trade Direction', options = ['Long', 'Short', 'Both'], defval = 'Both', group = 'Filters')
+tradeMon = input.bool(title = 'Mon', defval = true, group = 'Filters', inline = 'days1')
+tradeTue = input.bool(title = 'Tue', defval = true, group = 'Filters', inline = 'days1')
+tradeWed = input.bool(title = 'Wed', defval = true, group = 'Filters', inline = 'days1')
+tradeThu = input.bool(title = 'Thu', defval = true, group = 'Filters', inline = 'days1')
+tradeFri = input.bool(title = 'Fri', defval = true, group = 'Filters', inline = 'days2')
+tradeSat = input.bool(title = 'Sat', defval = true, group = 'Filters', inline = 'days2')
+tradeSun = input.bool(title = 'Sun', defval = true, group = 'Filters', inline = 'days2')
+hourStart = input.int(title = 'Hour Start', defval = 0, minval = 0, maxval = 23, group = 'Filters', inline = 'hours')
+hourEnd = input.int(title = 'Hour End', defval = 23, minval = 0, maxval = 23, group = 'Filters', inline = 'hours')
+
+// === Filter Logic ===
+currentDay = dayofweek
+dayAllowed = (currentDay == dayofweek.monday and tradeMon) or
+  (currentDay == dayofweek.tuesday and tradeTue) or
+  (currentDay == dayofweek.wednesday and tradeWed) or
+  (currentDay == dayofweek.thursday and tradeThu) or
+  (currentDay == dayofweek.friday and tradeFri) or
+  (currentDay == dayofweek.saturday and tradeSat) or
+  (currentDay == dayofweek.sunday and tradeSun)
+
+currentHour = hour
+hourAllowed = hourStart <= hourEnd ?
+  (currentHour >= hourStart and currentHour <= hourEnd) :
+  (currentHour >= hourStart or currentHour <= hourEnd)
+
+longAllowed = (tradeDirection == 'Long' or tradeDirection == 'Both') and dayAllowed and hourAllowed
+shortAllowed = (tradeDirection == 'Short' or tradeDirection == 'Both') and dayAllowed and hourAllowed
+
+// === Core Calculations ===
+ema = ta.ema(close, emaLength)
+ema200 = ta.ema(close, ema200Length)
+atr = ta.atr(atrPeriod)
+
+// === Engulfing Pattern Detection ===
+bullishEngulfing = close > open and close[1] < open[1] and close > open[1] and open <= close[1]
+bearishEngulfing = close < open and close[1] > open[1] and close < open[1] and open >= close[1]
+
+// === Pullback Consistency Filter ===
+barsClosedBelowEMA = (close[1] < ema[1] ? 1 : 0) + (close[2] < ema[2] ? 1 : 0) + (close[3] < ema[3] ? 1 : 0)
+longPullbackOk = barsClosedBelowEMA <= 1
+
+barsClosedAboveEMA = (close[1] > ema[1] ? 1 : 0) + (close[2] > ema[2] ? 1 : 0) + (close[3] > ema[3] ? 1 : 0)
+shortPullbackOk = barsClosedAboveEMA <= 1
+
+// === Swing Low/High Requirement ===
+swingLow7 = ta.lowest(low, 7)
+swingHigh7 = ta.highest(high, 7)
+isSwingLow = low == swingLow7 or low[1] == swingLow7[1]
+isSwingHigh = high == swingHigh7 or high[1] == swingHigh7[1]
+
+// === Massive Candle Filter ===
+highestOpen5 = ta.highest(open, 5)
+lowestOpen5 = ta.lowest(open, 5)
+truRange = ta.tr
+
+longNotMassive = close < highestOpen5 and truRange < atr * 2
+shortNotMassive = close > lowestOpen5 and truRange < atr * 2
+
+// === Combined Entry Conditions ===
+longCondition = longAllowed and close > ema and close > ema200 and longPullbackOk and bullishEngulfing and isSwingLow and longNotMassive
+shortCondition = shortAllowed and close < ema and close < ema200 and shortPullbackOk and bearishEngulfing and isSwingHigh and shortNotMassive
+
+// === Trade Management ===
+longStopDistance = (close - ta.lowest(low, 7)) + (atr * stopMultiplier)
+longStopPrice = close - longStopDistance
+longTpPrice = close + (longStopDistance * rrRatio)
+
+shortStopDistance = (ta.highest(high, 7) - close) + (atr * stopMultiplier)
+shortStopPrice = close + shortStopDistance
+shortTpPrice = close - (shortStopDistance * rrRatio)
+
+// === Signal Filtering ===
+var int lastLongSignal = na
+var int lastShortSignal = na
+
+longSignal = longCondition and (na(lastLongSignal) or bar_index - lastLongSignal > 5)
+shortSignal = shortCondition and (na(lastShortSignal) or bar_index - lastShortSignal > 5)
+
+if longSignal
+    lastLongSignal := bar_index
+if shortSignal
+    lastShortSignal := bar_index
+
+// === Plotting ===
+plot(title = 'EMA', series = showEma ? ema : na, color = color.new(color.blue, 0), linewidth = 2)
+plot(title = 'EMA 200', series = showEma ? ema200 : na, color = color.new(color.orange, 0), linewidth = 2)
+
+plotshape(series = longSignal, title = 'Long Signal', style = shape.triangleup,
+  location = location.belowbar, color = color.green, size = size.normal)
+
+plotshape(series = shortSignal, title = 'Short Signal', style = shape.triangledown,
+  location = location.abovebar, color = color.red, size = size.normal)
+
+// === Stop/Target Level Lines ===
+var float plotStopLong = na
+var float plotTpLong = na
+var float plotStopShort = na
+var float plotTpShort = na
+
+if longSignal
+    plotStopLong := longStopPrice
+    plotTpLong := longTpPrice
+else if not na(plotStopLong)
+    if low <= plotStopLong or high >= plotTpLong
+        plotStopLong := na
+        plotTpLong := na
+
+if shortSignal
+    plotStopShort := shortStopPrice
+    plotTpShort := shortTpPrice
+else if not na(plotStopShort)
+    if high >= plotStopShort or low <= plotTpShort
+        plotStopShort := na
+        plotTpShort := na
+
+plot(title = 'Long Stop', series = plotStopLong, color = color.new(color.red, 0),
+  style = plot.style_linebr, linewidth = 1)
+plot(title = 'Long TP', series = plotTpLong, color = color.new(color.green, 0),
+  style = plot.style_linebr, linewidth = 1)
+plot(title = 'Short Stop', series = plotStopShort, color = color.new(color.red, 0),
+  style = plot.style_linebr, linewidth = 1)
+plot(title = 'Short TP', series = plotTpShort, color = color.new(color.green, 0),
+  style = plot.style_linebr, linewidth = 1)
+
+// === Labels ===
+if longSignal
+    label.new(bar_index, low * 0.98,
+      text = "LONG\nEntry: " + str.tostring(close, "#.##") +
+        "\nStop: " + str.tostring(longStopPrice, "#.##") +
+        "\nTP: " + str.tostring(longTpPrice, "#.##") +
+        "\nR:R 1:" + str.tostring(rrRatio, "#.#"),
+      style = label.style_label_up,
+      color = color.green,
+      textcolor = color.white,
+      size = size.small)
+
+if shortSignal
+    label.new(bar_index, high * 1.02,
+      text = "SHORT\nEntry: " + str.tostring(close, "#.##") +
+        "\nStop: " + str.tostring(shortStopPrice, "#.##") +
+        "\nTP: " + str.tostring(shortTpPrice, "#.##") +
+        "\nR:R 1:" + str.tostring(rrRatio, "#.#"),
+      style = label.style_label_down,
+      color = color.red,
+      textcolor = color.white,
+      size = size.small)
+
+// === Alert Conditions ===
+alertcondition(longSignal, title = 'Long Pullback Signal', message = 'Aggressive Pullback: LONG signal on {{ticker}} at {{close}}')
+alertcondition(shortSignal, title = 'Short Pullback Signal', message = 'Aggressive Pullback: SHORT signal on {{ticker}} at {{close}}')
+
+// === Webhook Integration ===
+secretKey = "YOUR_SECRET_KEY_HERE"
+_ticker = syminfo.ticker
+_currenttf = timeframe.period
+
+if longSignal
+    _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
+    if str.contains(_shortticker, "USD") and not str.contains(_shortticker, "USDT")
+        _shortticker := str.replace_all(_shortticker, "USD", "USDT")
+    _symbol = "Symbol: " + _shortticker + ","
+    _timeframe = "Time Frame: " + _currenttf + ","
+    _side = "Side: BUY,"
+    _entry = "Entry: " + str.tostring(close) + ","
+    _stop = "StopLoss: " + str.tostring(longStopPrice) + ","
+    _tp = "TakeProfit: " + str.tostring(longTpPrice) + ","
+    _username = "Username: ALL,"
+    _accounttype = "AccountType: Standard,"
+    _exchange = "Exchange: Binance,"
+    _strategy = "Strategy: Aggressive_Pullback,"
+    _action = "Action: OpenLong"
+
+    _msg = "{"
+    _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+    _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
+    _msg := _msg + '"' + "msg" + '":' + '"' +
+      _username + "\\n" +
+      _accounttype + "\\n" +
+      _symbol + "\\n" +
+      _exchange + "\\n" +
+      _timeframe + "\\n" +
+      _side + "\\n" +
+      _entry + "\\n" +
+      _stop + "\\n" +
+      _tp + "\\n" +
+      _strategy + "\\n" +
+      _action + '"'
+    _msg := _msg + "}"
+
+    alert(_msg, alert.freq_once_per_bar_close)
+
+if shortSignal
+    _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
+    if str.contains(_shortticker, "USD") and not str.contains(_shortticker, "USDT")
+        _shortticker := str.replace_all(_shortticker, "USD", "USDT")
+    _symbol = "Symbol: " + _shortticker + ","
+    _timeframe = "Time Frame: " + _currenttf + ","
+    _side = "Side: SELL,"
+    _entry = "Entry: " + str.tostring(close) + ","
+    _stop = "StopLoss: " + str.tostring(shortStopPrice) + ","
+    _tp = "TakeProfit: " + str.tostring(shortTpPrice) + ","
+    _username = "Username: ALL,"
+    _accounttype = "AccountType: Standard,"
+    _exchange = "Exchange: Binance,"
+    _strategy = "Strategy: Aggressive_Pullback,"
+    _action = "Action: OpenShort"
+
+    _msg = "{"
+    _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+    _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
+    _msg := _msg + '"' + "msg" + '":' + '"' +
+      _username + "\\n" +
+      _accounttype + "\\n" +
+      _symbol + "\\n" +
+      _exchange + "\\n" +
+      _timeframe + "\\n" +
+      _side + "\\n" +
+      _entry + "\\n" +
+      _stop + "\\n" +
+      _tp + "\\n" +
+      _strategy + "\\n" +
+      _action + '"'
+    _msg := _msg + "}"
+
+    alert(_msg, alert.freq_once_per_bar_close)
+
+// === Debug Plots ===
+//plot(title = 'ATR', series = atr, color = color.new(color.orange, 100), linewidth = 2)
+//plot(title = 'Bars Below EMA', series = barsClosedBelowEMA, color = color.new(color.red, 100), linewidth = 2)
+//plot(title = 'Bars Above EMA', series = barsClosedAboveEMA, color = color.new(color.red, 100), linewidth = 2)
+//plot(title = 'Bullish Engulfing', series = bullishEngulfing ? 1 : 0, color = color.new(color.green, 100), linewidth = 2)
+//plot(title = 'Bearish Engulfing', series = bearishEngulfing ? 1 : 0, color = color.new(color.red, 100), linewidth = 2)
+//plot(title = 'True Range', series = truRange, color = color.new(color.purple, 100), linewidth = 2)

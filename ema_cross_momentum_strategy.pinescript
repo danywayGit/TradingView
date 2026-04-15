@@ -1,0 +1,61 @@
+pinescript
+//@version=5
+// HF #3: EMA Cross Momentum (Trend Scalp)
+// TF: 5m-15m | Type: Long/Short | Target: 1:2 R/R
+
+strategy("HF3: EMA Cross Momentum - Risk Based", overlay=true, initial_capital=100000, currency="USD")
+
+// === INPUTS ===
+risk_per_trade = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=5)
+ema_fast = input.int(9, "Fast EMA")
+ema_slow = input.int(21, "Slow EMA")
+rsi_period = input.int(14, "RSI Period")
+rsi_long = input.int(45, "RSI Long Min")
+rsi_short = input.int(55, "RSI Short Max")
+
+trade_mon = input.bool(true, "Monday")
+trade_tue = input.bool(true, "Tuesday")
+trade_wed = input.bool(true, "Wednesday")
+trade_thu = input.bool(true, "Thursday")
+trade_fri = input.bool(true, "Friday")
+trade_sat = input.bool(false, "Saturday")
+trade_sun = input.bool(false, "Sunday")
+
+hour_start = input.int(9, "Start Hour")
+hour_end = input.int(17, "End Hour")
+
+// === INDICATORS ===
+ema_f = ta.ema(close, ema_fast)
+ema_s = ta.ema(close, ema_slow)
+rsi = ta.rsi(close, rsi_period)
+atr = ta.atr(14)
+
+// === FILTERS ===
+dow = dayofweek
+allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
+allow_hour = hour >= hour_start and hour <= hour_end
+allow_trade = allow_day and allow_hour
+
+// === POSITION SIZING ===
+risk_amount = strategy.equity * risk_per_trade / 100
+stop_dist = atr * 1.5
+qty = risk_amount / stop_dist
+
+// === ENTRIES ===
+bull_cross = ta.crossover(ema_f, ema_s)
+bear_cross = ta.crossunder(ema_f, ema_s)
+
+long_cond = bull_cross and rsi > rsi_long and close > ema_s
+short_cond = bear_cross and rsi < rsi_short and close < ema_s
+
+// === EXECUTION ===
+if long_cond and allow_trade and strategy.position_size == 0
+    strategy.entry("Long", strategy.long, qty=qty)
+    strategy.exit("Exit Long", "Long", loss=close - stop_dist, profit=close + (stop_dist * 2))
+
+if short_cond and allow_trade and strategy.position_size == 0
+    strategy.entry("Short", strategy.short, qty=qty)
+    strategy.exit("Exit Short", "Short", loss=close + stop_dist, profit=close - (stop_dist * 2))
+
+plot(ema_f, "Fast EMA", color.blue)
+plot(ema_s, "Slow EMA", color.red)

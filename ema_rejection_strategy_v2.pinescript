@@ -1,0 +1,151 @@
+//@version=6
+strategy(title = 'EMA Rejection Strategy', shorttitle = 'EMAReject', overlay = true,
+  default_qty_type = strategy.cash, default_qty_value = 0,
+  initial_capital = 10000, commission_value = 0.1)
+
+// === External Indicator Inputs ===
+rsiSource = input.source(title = 'RSI', defval = close, group = 'External Indicator (My RSI Divergence v4.3b)')
+rsiEmaSource = input.source(title = 'RSI EMA', defval = close, group = 'External Indicator (My RSI Divergence v4.3b)')
+
+// === Trend Parameters ===
+ema200Length = input.int(title = 'EMA 200 Length', defval = 200, minval = 1, group = 'Trend')
+htfTimeframe = input.timeframe(title = 'Higher TF (Downtrend)', defval = '540', group = 'Trend')
+rejectionLookback = input.int(title = 'EMA Cross Lookback (bars)', defval = 10, minval = 1, maxval = 50, group = 'Trend',
+  tooltip = 'Max bars between crossover above EMA and crossunder back below (failed recovery)')
+rsiConfirmWindow = input.int(title = 'RSI Cross Confirm Window (bars)', defval = 3, minval = 1, maxval = 20, group = 'Trend',
+  tooltip = 'RSI cross must occur within this many bars of price EMA cross')
+minBarsBelowEma = input.int(title = 'Min Bars Below EMA After Cross', defval = 3, minval = 1, maxval = 50, group = 'Trend',
+  tooltip = 'Price must close below EMA200 for at least this many bars before short entry')
+minBarsAboveEma = input.int(title = 'Min Bars Above EMA After Cross', defval = 3, minval = 1, maxval = 50, group = 'Trend',
+  tooltip = 'Price must close above EMA200 for at least this many bars before long entry')
+rsiThresholdShort = input.float(title = 'RSI Max for Short', defval = 55, minval = 1, maxval = 100, step = 1, group = 'Trend',
+  tooltip = 'RSI must be below this value for short entry')
+rsiThresholdLong = input.float(title = 'RSI Min for Long', defval = 45, minval = 1, maxval = 100, step = 1, group = 'Trend',
+  tooltip = 'RSI must be above this value for long entry')
+showEma = input.bool(title = 'Show EMA 200', defval = true, group = 'Trend')
+
+// === Risk Management ===
+atrPeriod = input.int(title = 'ATR Period', defval = 14, minval = 1, group = 'Risk Management')
+stopMultiplier = input.float(title = 'Stop Size Multiplier (ATR)', defval = 3, minval = 0.1, step = 0.1, group = 'Risk Management')
+rrRatio = input.float(title = 'Risk/Reward Ratio', defval = 2, minval = 0.1, step = 0.1, group = 'Risk Management')
+riskPerTrade = input.float(title = 'Risk Per Trade (%)', defval = 1.0, minval = 0.1, maxval = 100, step = 0.1, group = 'Risk Management')
+
+// === Filters ===
+tradeDirection = input.string(title = 'Trade Direction', options = ['Long', 'Short', 'Both'], defval = 'Both', group = 'Filters')
+tradeMon = input.bool(title = 'Mon', defval = true, group = 'Filters', inline = 'days1')
+tradeTue = input.bool(title = 'Tue', defval = true, group = 'Filters', inline = 'days1')
+tradeWed = input.bool(title = 'Wed', defval = true, group = 'Filters', inline = 'days1')
+tradeThu = input.bool(title = 'Thu', defval = true, group = 'Filters', inline = 'days1')
+tradeFri = input.bool(title = 'Fri', defval = true, group = 'Filters', inline = 'days2')
+tradeSat = input.bool(title = 'Sat', defval = true, group = 'Filters', inline = 'days2')
+tradeSun = input.bool(title = 'Sun', defval = true, group = 'Filters', inline = 'days2')
+hourStart = input.int(title = 'Hour Start', defval = 0, minval = 0, maxval = 23, group = 'Filters', inline = 'hours')
+hourEnd = input.int(title = 'Hour End', defval = 23, minval = 0, maxval = 23, group = 'Filters', inline = 'hours')
+
+// === Filter Logic ===
+currentDay = dayofweek
+dayAllowed = (currentDay == dayofweek.monday and tradeMon) or
+  (currentDay == dayofweek.tuesday and tradeTue) or
+  (currentDay == dayofweek.wednesday and tradeWed) or
+  (currentDay == dayofweek.thursday and tradeThu) or
+  (currentDay == dayofweek.friday and tradeFri) or
+  (currentDay == dayofweek.saturday and tradeSat) or
+  (currentDay == dayofweek.sunday and tradeSun)
+
+currentHour = hour
+hourAllowed = hourStart <= hourEnd ?
+  (currentHour >= hourStart and currentHour <= hourEnd) :
+  (currentHour >= hourStart or currentHour <= hourEnd)
+
+longAllowed = (tradeDirection == 'Long' or tradeDirection == 'Both') and dayAllowed and hourAllowed
+shortAllowed = (tradeDirection == 'Short' or tradeDirection == 'Both') and dayAllowed and hourAllowed
+
+// === Core Calculations ===
+ema200 = ta.ema(close, ema200Length)
+atr = ta.atr(atrPeriod)
+
+// === Higher Timeframe Trend ===
+htfClose = request.security(syminfo.tickerid, htfTimeframe, close)
+htfEma200 = request.security(syminfo.tickerid, htfTimeframe, ta.ema(close, ema200Length))
+htfDowntrend = htfClose < htfEma200
+htfUptrend = htfClose > htfEma200
+
+// === EMA Rejection Detection (current TF) ===
+// Short: price crossed above EMA200 recently, now crossing back below (failed recovery)
+priceCrossAboveEma = ta.crossover(close, ema200)
+priceCrossBelowEma = ta.crossunder(close, ema200)
+barsSinceCrossAbove = ta.barssince(priceCrossAboveEma)
+barsSinceCrossBelow = ta.barssince(priceCrossBelowEma)
+
+shortEmaRejection = priceCrossBelowEma and barsSinceCrossAbove <= rejectionLookback
+
+// Confirm price stayed below/above EMA for minimum bars after crossing
+barsBelow = 0
+for i = 1 to minBarsBelowEma
+    if close[i] < ema200[i]
+        barsBelow += 1
+shortStayedBelow = barsBelow >= minBarsBelowEma
+
+// Long (inverse): price crossed below EMA200 recently, now crossing back above (failed breakdown)
+longEmaRejection = priceCrossAboveEma and barsSinceCrossBelow <= rejectionLookback
+
+barsAbove = 0
+for i = 1 to minBarsAboveEma
+    if close[i] > ema200[i]
+        barsAbove += 1
+longStayedAbove = barsAbove >= minBarsAboveEma
+
+// === RSI Confirmation ===
+rsiCrossBelowEma = ta.crossunder(rsiSource, rsiEmaSource)
+rsiCrossAboveEma = ta.crossover(rsiSource, rsiEmaSource)
+barsSinceRsiCrossBelow = ta.barssince(rsiCrossBelowEma)
+barsSinceRsiCrossAbove = ta.barssince(rsiCrossAboveEma)
+
+shortRsiConfirm = rsiCrossBelowEma or barsSinceRsiCrossBelow <= rsiConfirmWindow
+longRsiConfirm = rsiCrossAboveEma or barsSinceRsiCrossAbove <= rsiConfirmWindow
+
+// === Combined Entry Conditions ===
+shortCondition = shortAllowed and htfDowntrend and shortEmaRejection and shortStayedBelow and shortRsiConfirm and rsiSource < rsiThresholdShort
+longCondition = longAllowed and htfUptrend and longEmaRejection and longStayedAbove and longRsiConfirm and rsiSource > rsiThresholdLong
+
+// === Trade Management ===
+longStopDistance = atr * stopMultiplier
+longStopPrice = close - longStopDistance
+longTpPrice = close + (longStopDistance * rrRatio)
+
+shortStopDistance = atr * stopMultiplier
+shortStopPrice = close + shortStopDistance
+shortTpPrice = close - (shortStopDistance * rrRatio)
+
+// === Position Sizing ===
+riskAmount = strategy.equity * (riskPerTrade / 100)
+longQty = longStopDistance > 0 ? riskAmount / longStopDistance : 0
+shortQty = shortStopDistance > 0 ? riskAmount / shortStopDistance : 0
+
+// === Strategy Execution ===
+if longCondition and longQty > 0
+    strategy.entry("Long", strategy.long, qty = longQty)
+    strategy.exit("Long Exit", "Long", stop = longStopPrice, limit = longTpPrice)
+
+if shortCondition and shortQty > 0
+    strategy.entry("Short", strategy.short, qty = shortQty)
+    strategy.exit("Short Exit", "Short", stop = shortStopPrice, limit = shortTpPrice)
+
+// === Plotting ===
+plot(title = 'EMA 200', series = showEma ? ema200 : na, color = color.new(color.orange, 0), linewidth = 2)
+
+plotshape(series = longCondition, title = 'Long Signal', style = shape.triangleup,
+  location = location.belowbar, color = color.green, size = size.normal)
+
+plotshape(series = shortCondition, title = 'Short Signal', style = shape.triangledown,
+  location = location.abovebar, color = color.red, size = size.normal)
+
+// === Debug Plots ===
+//plot(title = 'RSI Source', series = rsiSource, color = color.new(color.purple, 100))
+//plot(title = 'RSI EMA Source', series = rsiEmaSource, color = color.new(color.blue, 100))
+//plot(title = 'HTF Downtrend', series = htfDowntrend ? 1 : 0, color = color.new(color.red, 100))
+//plot(title = 'HTF Uptrend', series = htfUptrend ? 1 : 0, color = color.new(color.green, 100))
+//plot(title = 'Bars Since Cross Above EMA', series = barsSinceCrossAbove, color = color.new(color.yellow, 100))
+//plot(title = 'Bars Since Cross Below EMA', series = barsSinceCrossBelow, color = color.new(color.yellow, 100))
+//plot(title = 'Bars Since RSI Cross Below', series = barsSinceRsiCrossBelow, color = color.new(color.orange, 100))
+//plot(title = 'Bars Since RSI Cross Above', series = barsSinceRsiCrossAbove, color = color.new(color.orange, 100))
