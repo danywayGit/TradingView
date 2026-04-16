@@ -1,4 +1,17 @@
 //@version=6
+// TF: Any | Type: Long/Short (default: Short) | Target: 1:2 R/R
+//
+// Description:
+//   EMA200 rejection strategy. Enters when price makes a failed recovery above (or below)
+//   EMA200 — crossing above then quickly rejecting back below — confirmed by an RSI
+//   cross in the same direction within a short window. Higher-timeframe trend alignment
+//   is used as an additional filter.
+//
+// Main idea:     Trade failed EMA200 breakouts. Short when price briefly recovers above
+//               EMA200 then falls back through it (rejection). Long on the inverse.
+// Max hold bars: NA — exits fully managed by ATR stop-loss and R:R take-profit.
+// Stop loss:     ATR × multiplier (default 3×) beyond the rejection candle.
+// Take profit:   SL distance × R:R ratio (default 2).
 strategy(title = 'EMA Rejection Strategy', shorttitle = 'EMAReject', overlay = true,
   default_qty_type = strategy.cash, default_qty_value = 0,
   initial_capital = 100000, commission_value = 0.1)

@@ -1,4 +1,17 @@
 //@version=6
+// TF: All | Type: Long/Short | Target: 1:2 R/R
+//
+// Description:
+//   Engulfing candle pullback strategy. Enters on a bullish or bearish engulfing candle
+//   that forms after a pullback toward the fast EMA20, while the EMA200 confirms the
+//   broader trend direction. A "pullback consistency" filter ensures price has not moved
+//   too far from the EMA before the signal fires.
+//
+// Main idea:     Trade high-quality engulfing reversals in the direction of EMA200 trend,
+//               only when price is pulling back close to EMA20.
+// Max hold bars: NA — exits fully managed by ATR stop-loss and R:R take-profit.
+// Stop loss:     ATR × multiplier placed beyond the signal candle (default 3× ATR).
+// Take profit:   Entry price ± SL distance × R:R ratio (default 2).
 strategy(title = 'Aggressive Pullback Strategy', shorttitle = 'AggrPB_Strat', overlay = true,
   default_qty_type = strategy.cash, default_qty_value = 0,
   initial_capital = 10000, commission_value = 0.1)

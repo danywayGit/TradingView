@@ -3,6 +3,17 @@ pinescript
 // SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
 // SWING #4: MACD Divergence (Momentum Reversal)
 // TF: 2H | Type: Long/Short | Target: 1:2 R/R
+//
+// Description:
+//   MACD histogram divergence swing strategy. Detects bullish divergence (price makes a
+//   lower low but MACD histogram makes a higher low) and bearish divergence (opposite),
+//   then confirms with RSI. Trades momentum reversals at trend exhaustion points.
+//
+// Main idea:     Enter counter-trend when MACD histogram diverges from price and RSI
+//               confirms the momentum shift.
+// Max hold bars: NA — exits managed by ATR-based SL (2×) and 1:2 R:R TP.
+// Stop loss:     ATR × 2 below/above entry.
+// Take profit:   SL distance × 2 (1:2 R:R).
 
 strategy("SWING4: MACD Divergence - Risk Based", overlay=true, initial_capital=100000, currency="USD")
 

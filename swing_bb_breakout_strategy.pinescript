@@ -3,6 +3,17 @@ pinescript
 // SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
 // SWING #2: Bollinger Squeeze Breakout (Volatility Expansion)
 // TF: 4H | Type: Long/Short | Target: 1:2.5 R/R
+//
+// Description:
+//   Bollinger Band squeeze breakout strategy. Waits for BB width to contract (squeeze)
+//   for a sustained period, then enters when price breaks out of the bands with MACD
+//   line above/below signal line as momentum confirmation.
+//
+// Main idea:     Trade the volatility expansion that follows a BB squeeze. Enter on the
+//               breakout candle in the direction confirmed by MACD.
+// Max hold bars: NA — exits managed by ATR-based SL (2.5×) and 1:2.5 R:R TP.
+// Stop loss:     ATR × 2.5 below/above entry.
+// Take profit:   SL distance × 2.5 (1:2.5 R:R).
 strategy("SWING2: BB Squeeze Breakout - Risk Based", overlay=true, initial_capital=100000, currency="USD")
 
 // === INPUTS ===

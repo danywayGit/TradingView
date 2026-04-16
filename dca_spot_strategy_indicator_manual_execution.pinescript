@@ -1,4 +1,17 @@
 //@version=6
+// TF: 12h-1d (optimised) | Type: Long/Short signals | Target: DCA spot accumulation
+//
+// Description:
+//   Manual-execution variant of the DCA spot indicator. Same weighted scoring system as
+//   DCABuy_v10, but adds per-user alert routing (Danyway, Enzo, Luca, ALL) to support
+//   multi-account trading bot webhook integration. Intended for manual oversight rather
+//   than fully automated execution.
+//
+// Main idea:     Same score-based BUY/SELL signal logic as dca_spot_strategy_indicator.
+//               Extends it with named user assignment in alert payloads.
+// Max hold bars: NA — indicator only.
+// Stop loss:     NA — managed externally per user.
+// Take profit:   NA — managed externally per user.
 indicator(title = 'DCA Buy v10 - Enhanced with Score', shorttitle = 'DCABuy_v10Test', overlay = true, max_labels_count=500)
 
 // === Input Parameters ===

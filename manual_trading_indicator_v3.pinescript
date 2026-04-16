@@ -5,6 +5,20 @@
 // Up to 9
 
 //@version=5
+// TF: Any | Type: Indicator (overlay) | Target: Manual DCA / multi-entry trade management
+//
+// Description:
+//   Extended manual trading indicator supporting DCA-style multi-entry setups.
+//   Defines an entry price range (min + max) and divides it into N equally-spaced entries
+//   (up to 9). Displays all entry levels plus SL and up to 3 TP levels on the chart.
+//   Supports confluence conditions with up to 2 external indicator sources.
+//   Routes alerts to named users (Danyway, Enzo, Luca, ALL) for multi-account webhook bots.
+//
+// Main idea:     Visualise and alert multi-entry DCA plans across a price range,
+//               with optional indicator confluence gating.
+// Max hold bars: NA — lines persist until manually removed.
+// Stop loss:     Manually entered price level.
+// Take profit:   Manually entered price levels (up to 3).
 indicator(title = "Manual Trading v3", shorttitle = "ManualTrading3", overlay=true)
 
 dispaytp2 = input.bool(defval = false, title="Display Take Profit 2", confirm=true)

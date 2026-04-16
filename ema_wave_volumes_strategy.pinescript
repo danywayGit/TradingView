@@ -5,6 +5,16 @@ pinescript
 
 // SWING #1: EMA Wave + Volume (Trend Following)
 // TF: 1H | Type: Long/Short | Target: 1:3 R/R
+//
+// Description:
+//   EMA wave trend-following strategy with volume confirmation. Enters when the fast EMA
+//   is above/below the slow EMA, RSI crosses the momentum threshold, price is aligned
+//   with the fast EMA, and volume exceeds its moving average.
+//
+// Main idea:     Ride trending moves confirmed by EMA alignment and above-average volume.
+// Max hold bars: NA — exits managed by ATR-based SL (2×) and 1:3 R:R TP.
+// Stop loss:     ATR × 2 below/above entry.
+// Take profit:   SL distance × 3 (1:3 R:R).
 
 strategy("SWING1: EMA Wave + Volume - Risk Based", overlay=true, ini
 [08.04.2026 04:30] TVRemix: tial_capital=100000, currency="USD")

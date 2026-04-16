@@ -3,6 +3,17 @@ pinescript
 // SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
 // SWING #3: Supertrend + ADX Power (Strong Trend)
 // TF: 1H-4H | Type: Long/Short | Target: Trail by Supertrend
+//
+// Description:
+//   Trend-following swing strategy using Supertrend as both entry signal and trailing
+//   stop. ADX confirms the trend is strong enough to trade; EMA50 acts as a directional
+//   bias filter. Position is closed when Supertrend flips direction.
+//
+// Main idea:     Enter on a Supertrend flip when ADX > threshold and price is on the
+//               correct side of EMA50. Let Supertrend trail the stop.
+// Max hold bars: NA — exit triggered by Supertrend direction change or ATR-based SL.
+// Stop loss:     ATR × 2.5 at entry; Supertrend level acts as trailing stop.
+// Take profit:   NA — trail and hold until Supertrend reversal.
 
 strategy("SWING3: Supertrend + ADX - Risk Based", overlay=true, initial_capital=100000, currency="USD")
 

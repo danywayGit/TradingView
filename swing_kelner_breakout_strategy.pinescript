@@ -3,6 +3,17 @@ pinescript
 // SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
 // SWING #5: Keltner Breakout (Trend Continuation)
 // TF: 1H | Type: Long/Short | Target: 1:3 R/R
+//
+// Description:
+//   Keltner Channel breakout strategy. Enters when price closes outside the Keltner
+//   Channel bands (EMA ± ATR × multiplier), confirmed by CCI not being at an extreme.
+//   Targets trend continuation after a volatility breakout.
+//
+// Main idea:     Buy breakouts above the upper Keltner band or sell breakdowns below
+//               the lower band, filtered by CCI to avoid over-extended entries.
+// Max hold bars: NA — exits managed by ATR-based SL and 1:3 R:R TP.
+// Stop loss:     EMA (Keltner midline) used as the stop reference.
+// Take profit:   Entry price ± SL distance × 3 (1:3 R:R).
 
 strategy("SWING5: Keltner Breakout - Risk Based", overlay=true, initial_capital=100000, currency="USD")
 

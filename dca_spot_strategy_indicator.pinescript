@@ -1,4 +1,18 @@
 //@version=6
+// TF: 12h-1d (optimised) | Type: Long/Short signals | Target: DCA spot accumulation
+//
+// Description:
+//   DCA (Dollar-Cost Averaging) spot entry/exit signal indicator using a weighted scoring
+//   system (max 9 points). Buy signals fire when price is far below EMA200 and multiple
+//   confluence factors align; sell signals fire on the opposite condition.
+//   Designed for volatile crypto (BTC, ETH, BNB, TRX) to find low entry points
+//   during large dips below EMA200.
+//
+// Main idea:     Score-based BUY/SELL alerts: 1pt EMA distance, 2pt RSI, 2pt V-shape,
+//               1pt price acceleration, 1pt volume spike. Signal fires above threshold.
+// Max hold bars: NA — indicator only, no automated position management.
+// Stop loss:     NA — indicator signals only. Managed externally.
+// Take profit:   NA — indicator signals only. Managed externally.
 indicator(title = 'DCA Buy v10 - Enhanced with Score', shorttitle = 'DCABuy_v10', overlay = true, max_labels_count=500)
 
 // === Input Parameters ===

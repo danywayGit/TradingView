@@ -2,6 +2,16 @@ pinescript
 //@version=5
 // HF #3: EMA Cross Momentum (Trend Scalp)
 // TF: 5m-15m | Type: Long/Short | Target: 1:2 R/R
+//
+// Description:
+//   EMA crossover momentum scalper. Enters on a fast EMA (9) crossing the slow EMA (21),
+//   confirmed by RSI momentum and price position relative to the slow EMA.
+//
+// Main idea:     Trade the momentum of EMA crossovers in the direction of the cross,
+//               filtered by RSI to avoid weak/false crosses.
+// Max hold bars: NA — exits managed by ATR-based SL (1.5×) and 1:2 R:R TP.
+// Stop loss:     ATR × 1.5 below/above entry.
+// Take profit:   SL distance × 2 (1:2 R:R).
 
 strategy("HF3: EMA Cross Momentum - Risk Based", overlay=true, initial_capital=100000, currency="USD")
 

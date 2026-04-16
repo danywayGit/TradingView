@@ -2,6 +2,19 @@
 // © danywaystrige
 
 //@version=5
+// TF: Any | Type: Indicator (overlay) | Target: Manual trade management
+//
+// Description:
+//   Manual trade visualisation tool. Plots fixed horizontal lines for a single
+//   entry price, stop loss, and up to 3 take profit levels directly on the chart.
+//   Displays the stop loss percentage and risk:reward ratio as labels.
+//   Sends webhook-compatible alert payloads for trading bot integration.
+//
+// Main idea:     Overlay entry, SL, and TP levels entered manually for any open trade.
+//               Useful for visualising trade plans and triggering bot alerts.
+// Max hold bars: NA — lines persist until manually removed.
+// Stop loss:     Manually entered price level.
+// Take profit:   Manually entered price levels (up to 3).
 indicator("Manual Trading",overlay=true)
 
 dispaytp2 = input.bool(defval = false, title="Display Take Profit 2", confirm=true)

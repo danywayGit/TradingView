@@ -2,6 +2,19 @@
 // © danywaystrige
 
 //@version=6
+// TF: Any | Type: Indicator (sub-chart) | Target: N/A
+//
+// Description:
+//   Sub-chart indicator that plots the % distance of price from EMA200.
+//   Detects and marks pivot highs and lows in the distance series when they
+//   exceed configurable thresholds (default ±15%), and highlights V-shape and
+//   inverted-V-shape reversals within the distance oscillator.
+//
+// Main idea:     Visualise how stretched price is from EMA200 as an oscillator.
+//               Pivot marks and V-shape detection identify likely reversal zones.
+// Max hold bars: NA — indicator only.
+// Stop loss:     NA — indicator only.
+// Take profit:   NA — indicator only.
 indicator(title = "EMA 200 Distance & V-Shape Reversals", shorttitle = "EMA200-VShape", overlay = false)
 
 // === Input Parameters ===

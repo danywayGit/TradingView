@@ -1,4 +1,16 @@
 //@version=6
+// TF: Any | Type: Long/Short | Target: 1:2 R/R
+//
+// Description:
+//   Improved version of the EMA Rejection Strategy. Adds minimum confirmation bars
+//   below/above EMA200 before entry (price must stay on the rejection side for N bars),
+//   RSI threshold filters for long/short entries, and stricter signal validation.
+//
+// Main idea:     Same EMA200 rejection concept as v1, but with higher-quality entry
+//               confirmation to reduce false signals in choppy conditions.
+// Max hold bars: NA — exits fully managed by ATR stop-loss and R:R take-profit.
+// Stop loss:     ATR × multiplier (default 3×) beyond the rejection candle.
+// Take profit:   SL distance × R:R ratio (default 2).
 strategy(title = 'EMA Rejection Strategy', shorttitle = 'EMAReject', overlay = true,
   default_qty_type = strategy.cash, default_qty_value = 0,
   initial_capital = 10000, commission_value = 0.1)

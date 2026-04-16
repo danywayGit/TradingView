@@ -1,4 +1,16 @@
 //@version=6
+// TF: All | Type: Long/Short | Target: 1:2 R/R
+//
+// Description:
+//   Indicator version of the Aggressive Pullback strategy. Detects bullish/bearish engulfing
+//   candles after a pullback to EMA20 in the direction of EMA200 trend, then fires chart
+//   labels and webhook alerts for manual or bot-assisted trading.
+//
+// Main idea:     Visual signal + alert companion for the Aggressive Pullback strategy.
+//               Displays SL/TP levels as labels directly on the chart.
+// Max hold bars: NA — indicator only, no automated exits.
+// Stop loss:     ATR × multiplier (default 2×) shown as label on chart.
+// Take profit:   SL distance × R:R ratio (default 2) shown as label on chart.
 indicator(title = 'Aggressive Pullback Indicator', shorttitle = 'AggrPB_Ind', overlay = true, max_labels_count = 500)
 
 // === Input Parameters ===
