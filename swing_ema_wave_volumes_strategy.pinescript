@@ -35,6 +35,8 @@ trade_thu = input.bool(true, "Thursday")
 trade_fri = input.bool(true, "Friday")
 trade_sat = input.bool(true, "Saturday")
 trade_sun = input.bool(true, "Sunday")
+show_trade_lines = input.bool(true, "Show Trade Lines")
+trade_line_bars = input.int(45, "Trade Line Bars", minval=1, maxval=100)
 
 // === INDICATORS ===
 ema_f = ta.ema(close, ema_fast)
@@ -65,6 +67,23 @@ if long_cond and strategy.position_size == 0
 if short_cond and strategy.position_size == 0
     strategy.entry("Short", strategy.short, qty=qty)
     strategy.exit("Exit Short", "Short", loss=close + stop_dist, profit=close - (stop_dist * 3))
+
+// === Trade Lines ===
+if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    _entry = strategy.position_avg_price
+    _sl = _entry - stop_dist
+    _tp = _entry + stop_dist * 3
+    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
+    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
+    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+
+if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    _entry = strategy.position_avg_price
+    _sl = _entry + stop_dist
+    _tp = _entry - stop_dist * 3
+    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
+    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
+    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
 
 plot(ema_f, "Fast", color.blue)
 plot(ema_s, "Slow", color.red)

@@ -32,6 +32,8 @@ trade_thu = input.bool(true, "Thursday")
 trade_fri = input.bool(true, "Friday")
 trade_sat = input.bool(true, "Saturday")
 trade_sun = input.bool(true, "Sunday")
+show_trade_lines = input.bool(true, "Show Trade Lines")
+trade_line_bars = input.int(45, "Trade Line Bars", minval=1, maxval=100)
 
 // === INDICATORS ===
 [st_dir, st_level] = ta.supertrend(st_factor, st_period)
@@ -66,6 +68,23 @@ if short_cond and strategy.position_size == 0
 // Trailing exit
 strategy.close("Long", when=st_bear)
 strategy.close("Short", when=st_bull)
+
+// === Trade Lines ===
+if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    _entry = strategy.position_avg_price
+    _sl = _entry - stop_dist
+    _tp = _entry + stop_dist * 2
+    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
+    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
+    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+
+if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    _entry = strategy.position_avg_price
+    _sl = _entry + stop_dist
+    _tp = _entry - stop_dist * 2
+    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
+    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
+    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
 
 plot(st_level, "Supertrend", color=st_bull ? color.green : color.red)
 plot(ema_filt, "EMA Filter", color.blue)

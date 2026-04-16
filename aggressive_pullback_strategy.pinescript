@@ -36,6 +36,8 @@ tradeSat = input.bool(title = 'Sat', defval = true, group = 'Filters', inline = 
 tradeSun = input.bool(title = 'Sun', defval = true, group = 'Filters', inline = 'days2')
 hourStart = input.int(title = 'Hour Start', defval = 0, minval = 0, maxval = 23, group = 'Filters', inline = 'hours')
 hourEnd = input.int(title = 'Hour End', defval = 23, minval = 0, maxval = 23, group = 'Filters', inline = 'hours')
+show_trade_lines = input.bool(title = 'Show Trade Lines', defval = true, group = 'Visuals')
+trade_line_bars = input.int(title = 'Trade Line Bars', defval = 45, minval = 1, maxval = 100, group = 'Visuals')
 
 // === Filter Logic ===
 currentDay = dayofweek
@@ -115,6 +117,25 @@ if longCondition and longQty > 0
 if shortCondition and shortQty > 0
     strategy.entry("Short", strategy.short, qty = shortQty)
     strategy.exit("Short Exit", "Short", stop = shortStopPrice, limit = shortTpPrice)
+
+// === Trade Lines ===
+if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    _entry = strategy.position_avg_price
+    _sl_dist = (_entry - ta.lowest(low, 7)) + (atr * stopMultiplier)
+    _sl = _entry - _sl_dist
+    _tp = _entry + (_sl_dist * rrRatio)
+    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
+    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
+    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+
+if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    _entry = strategy.position_avg_price
+    _sl_dist = (ta.highest(high, 7) - _entry) + (atr * stopMultiplier)
+    _sl = _entry + _sl_dist
+    _tp = _entry - (_sl_dist * rrRatio)
+    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
+    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
+    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
 
 // === Plotting ===
 plot(title = 'EMA', series = showEma ? ema : na, color = color.new(color.blue, 0), linewidth = 2)
