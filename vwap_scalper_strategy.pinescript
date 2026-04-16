@@ -15,6 +15,8 @@
 //               Optional R:R mode: fixed target at entry ± (SL distance × ratio, default 1.5).
 //               When R:R TP is enabled, VWAP exit is disabled so the ratio controls the exit.
 
+// Requires: Need a charts with volume data for VWAP calculation.
+
 
 strategy('HF1: VWAP Scalp v3', overlay = true, initial_capital = 100000,
   default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
