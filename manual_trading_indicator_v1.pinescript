@@ -15,7 +15,7 @@
 // Max hold bars: NA — lines persist until manually removed.
 // Stop loss:     Manually entered price level.
 // Take profit:   Manually entered price levels (up to 3).
-indicator('Manual Trading', overlay = true)
+indicator('Manual Trading v1', overlay = true)
 
 dispaytp2 = input.bool(defval = false, title = 'Display Take Profit 2', confirm = true)
 dispaytp3 = input.bool(defval = false, title = 'Display Take Profit 3', confirm = true)
