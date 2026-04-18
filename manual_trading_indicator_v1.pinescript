@@ -69,15 +69,17 @@ var entry_sl = math.abs(EntryPrice - StopLoss)
 var entry_tp = math.abs(EntryPrice - TakeProfit1)
 var RRR = math.round(entry_tp / entry_sl, 1)
 
-var label_RRR = label.new(bar_index, TakeProfit1, style = label_style_long_tp, text = 'Risk Reward Ratio : ' + str.tostring(RRR))
-label.set_x(label_RRR, 0)
-label.set_xloc(label_RRR, time, xloc.bar_time)
+if sameTicker
+    var label_RRR = label.new(bar_index, TakeProfit1, style = label_style_long_tp, text = 'Risk Reward Ratio : ' + str.tostring(RRR))
+    label.set_x(label_RRR, 0)
+    label.set_xloc(label_RRR, time, xloc.bar_time)
 
 var stop_pourcentage = math.round(math.abs((StopLoss - EntryPrice) * 100) / EntryPrice, 2)
 
-var label_stop = label.new(bar_index, StopLoss, style = label_style_long_sl, text = 'Stop Loss : ' + str.tostring(stop_pourcentage) + '%')
-label.set_x(label_stop, 0)
-label.set_xloc(label_stop, time, xloc.bar_time)
+if sameTicker
+    var label_stop = label.new(bar_index, StopLoss, style = label_style_long_sl, text = 'Stop Loss : ' + str.tostring(stop_pourcentage) + '%')
+    label.set_x(label_stop, 0)
+    label.set_xloc(label_stop, time, xloc.bar_time)
 
 
 _ticker = syminfo.ticker
