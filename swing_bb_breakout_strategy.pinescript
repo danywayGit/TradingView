@@ -1,5 +1,4 @@
-pinescript
-//@version=5
+//@version=6
 // SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
 // SWING #2: Bollinger Squeeze Breakout (Volatility Expansion)
 // TF: 4H | Type: Long/Short | Target: 1:2.5 R/R
@@ -14,26 +13,27 @@ pinescript
 // Max hold bars: NA — exits managed by ATR-based SL (2.5×) and 1:2.5 R:R TP.
 // Stop loss:     ATR × 2.5 below/above entry.
 // Take profit:   SL distance × 2.5 (1:2.5 R:R).
-strategy("SWING2: BB Squeeze Breakout - Risk Based", overlay=true, initial_capital=100000, currency="USD")
+
+strategy('SWING2: BB Squeeze Breakout - Risk Based', overlay = true, initial_capital = 100000, currency = 'USD')
 
 // === INPUTS ===
-risk_per_trade = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=5)
-bb_length = input.int(20, "BB Length")
-bb_mult = input.float(2.0, "BB Mult")
-squeeze_length = input.int(5, "Squeeze Bars")
-macd_fast = input.int(12, "MACD Fast")
-macd_slow = input.int(26, "MACD Slow")
-macd_signal = input.int(9, "MACD Signal")
+risk_per_trade = input.float(1.0, 'Risk % per Trade', minval = 0.1, maxval = 5)
+bb_length = input.int(20, 'BB Length')
+bb_mult = input.float(2.0, 'BB Mult')
+squeeze_length = input.int(5, 'Squeeze Bars')
+macd_fast = input.int(12, 'MACD Fast')
+macd_slow = input.int(26, 'MACD Slow')
+macd_signal = input.int(9, 'MACD Signal')
 
-trade_mon = input.bool(true, "Monday")
-trade_tue = input.bool(true, "Tuesday")
-trade_wed = input.bool(true, "Wednesday")
-trade_thu = input.bool(true, "Thursday")
-trade_fri = input.bool(true, "Friday")
-trade_sat = input.bool(true, "Saturday")
-trade_sun = input.bool(true, "Sunday")
-show_trade_lines = input.bool(true, "Show Trade Lines")
-trade_line_bars = input.int(45, "Trade Line Bars", minval=1, maxval=100)
+trade_mon = input.bool(true, 'Monday')
+trade_tue = input.bool(true, 'Tuesday')
+trade_wed = input.bool(true, 'Wednesday')
+trade_thu = input.bool(true, 'Thursday')
+trade_fri = input.bool(true, 'Friday')
+trade_sat = input.bool(true, 'Saturday')
+trade_sun = input.bool(true, 'Sunday')
+show_trade_lines = input.bool(true, 'Show Trade Lines')
+trade_line_bars = input.int(45, 'Trade Line Bars', minval = 1, maxval = 100)
 
 // === INDICATORS ===
 basis = ta.sma(close, bb_length)
@@ -51,7 +51,7 @@ was_squeezed = ta.barssince(squeeze) <= squeeze_length
 
 // === FILTERS ===
 dow = dayofweek
-allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
+allow_day = dow == 1 and trade_mon or dow == 2 and trade_tue or dow == 3 and trade_wed or dow == 4 and trade_thu or dow == 5 and trade_fri or dow == 6 and trade_sat or dow == 7 and trade_sun
 
 // === POSITION SIZING ===
 risk_amount = strategy.equity * risk_per_trade / 100
@@ -64,12 +64,12 @@ short_cond = was_squeezed and close < lower_bb and macd_line < signal_line and a
 
 // === EXECUTION ===
 if long_cond and strategy.position_size == 0
-    strategy.entry("Long", strategy.long, qty=qty)
-    strategy.exit("Exit", "Long", loss=close - stop_dist, profit=close + (stop_dist * 2.5))
+    strategy.entry('Long', strategy.long, qty = qty)
+    strategy.exit('Exit', 'Long', stop = close - stop_dist, limit = close + stop_dist * 2.5)
 
 if short_cond and strategy.position_size == 0
-    strategy.entry("Short", strategy.short, qty=qty)
-[08.04.2026 04:30] TVRemix: strategy.exit("Exit", "Short", loss=close + stop_dist, profit=close - (stop_dist * 2.5))
+    strategy.entry('Short', strategy.short, qty = qty)
+    strategy.exit('Exit', 'Short', stop = close + stop_dist, limit = close - stop_dist * 2.5)
 
 // === Trade Lines ===
 if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
@@ -88,6 +88,6 @@ if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1]
     line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
     line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
 
-plot(upper_bb, "Upper BB", color.red)
-plot(lower_bb, "Lower BB", color.green)
-plot(basis, "Basis", color.gray)
+plot(upper_bb, 'Upper BB', color.red)
+plot(lower_bb, 'Lower BB', color.green)
+plot(basis, 'Basis', color.gray)

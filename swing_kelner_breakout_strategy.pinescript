@@ -1,5 +1,4 @@
-pinescript
-//@version=5
+//@version=6
 // SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
 // SWING #5: Keltner Breakout (Trend Continuation)
 // TF: 1H | Type: Long/Short | Target: 1:3 R/R
@@ -11,157 +10,78 @@ pinescript
 //
 // Main idea:     Buy breakouts above the upper Keltner band or sell breakdowns below
 //               the lower band, filtered by CCI to avoid over-extended entries.
-// Max hold bars: NA — exits managed by ATR-based SL and 1:3 R:R TP.
-// Stop loss:     EMA (Keltner midline) used as the stop reference.
+// Max hold bars: NA — exits managed by EMA stop and 1:3 R:R TP.
+// Stop loss:     EMA (Keltner midline) at entry — price returning to midline = failed breakout.
 // Take profit:   Entry price ± SL distance × 3 (1:3 R:R).
 
-strategy("SWING5: Keltner Breakout - Risk Based", overlay=true, initial_capital=100000, currency="USD")
+
+strategy('SWING5: Keltner Breakout - Risk Based', overlay = true, initial_capital = 100000, currency = 'USD')
 
 // === INPUTS ===
-risk_per_trade = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=5)
-kc_length = input.int(20, "KC Length")
-kc_mult = input.float(2.0, "KC Multiplier")
-cci_period = input.int(20, "CCI Period")
+risk_per_trade = input.float(1.0, 'Risk % per Trade', minval = 0.1, maxval = 5)
+kc_length = input.int(20, 'KC Length')
+kc_mult = input.float(2.0, 'KC Multiplier')
+cci_period = input.int(20, 'CCI Period')
 
-trade_mon = input.bool(true, "Monday")
-trade_tue = input.bool(true, "Tuesday")
-trade_wed = input.bool(true, "Wednesday")
-trade_thu = input.bool(true, "Thursday")
-trade_fri = input.bool(true, "Friday")
-trade_sat = input.bool(true, "Saturday")
-trade_sun = input.bool(true, "Sunday")
-show_trade_lines = input.bool(true, "Show Trade Lines")
-trade_line_bars = input.int(45, "Trade Line Bars", minval=1, maxval=100)
+trade_mon = input.bool(true, 'Monday')
+trade_tue = input.bool(true, 'Tuesday')
+trade_wed = input.bool(true, 'Wednesday')
+trade_thu = input.bool(true, 'Thursday')
+trade_fri = input.bool(true, 'Friday')
+trade_sat = input.bool(true, 'Saturday')
+trade_sun = input.bool(true, 'Sunday')
+show_trade_lines = input.bool(true, 'Show Trade Lines')
+trade_line_bars = input.int(45, 'Trade Line Bars', minval = 1, maxval = 100)
 
 // === INDICATORS ===
-ema = ta.ema(close, kc_length)
+ema_mid = ta.ema(close, kc_length)
 atr = ta.atr(kc_length)
-upper_kc = ema + kc_mult * atr
-lower_kc = ema - kc_mult * atr
+upper_kc = ema_mid + kc_mult * atr
+lower_kc = ema_mid - kc_mult * atr
 cci = ta.cci(close, cci_period)
 
 // === FILTERS ===
 dow = dayofweek
-allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
+allow_day = dow == 1 and trade_mon or dow == 2 and trade_tue or dow == 3 and trade_wed or dow == 4 and trade_thu or dow == 5 and trade_fri or dow == 6 and trade_sat or dow == 7 and trade_sun
 
 // === POSITION SIZING ===
+// Stop distance = distance from entry to EMA midline
 risk_amount = strategy.equity * risk_per_trade / 100
-stop_dist = atr * 2
-qty = risk_amount / stop_dist
+stop_dist_long = close - ema_mid // how far we are above EMA
+stop_dist_short = ema_mid - close // how far we are below EMA
+qty_long = stop_dist_long > 0 ? risk_amount / stop_dist_long : 0
+qty_short = stop_dist_short > 0 ? risk_amount / stop_dist_short : 0
 
 // === ENTRIES ===
 long_cond = close > upper_kc and cci > -100 and allow_day
 short_cond = close < lower_kc and cci < 100 and allow_day
 
 // === EXECUTION ===
-if long_cond and strategy.position_size == 0
-    strategy.entry("Long", strategy.long, qty=qty)
-    strategy.exit("Exit", "Long", loss=ema, profit=close + (stop_dist * 3))
+if long_cond and strategy.position_size == 0 and qty_long > 0
+    strategy.entry('Long', strategy.long, qty = qty_long)
+    strategy.exit('Exit', 'Long', stop = ema_mid, limit = close + stop_dist_long * 3)
 
-if short_cond and strategy.position_size == 0
-    strategy.entry("Short", strategy.short, qty=qty)
-    strategy.exit("Exit", "Short", loss=ema, profit=close - (stop_dist * 3))
+if short_cond and strategy.position_size == 0 and qty_short > 0
+    strategy.entry('Short', strategy.short, qty = qty_short)
+    strategy.exit('Exit', 'Short', stop = ema_mid, limit = close - stop_dist_short * 3)
 
 // === Trade Lines ===
 if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
     _entry = strategy.position_avg_price
-    _sl = _entry - stop_dist
-    _tp = _entry + stop_dist * 3
+    _sl = ema_mid
+    _tp = _entry + (_entry - ema_mid) * 3
     line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
     line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
     line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
 
 if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
     _entry = strategy.position_avg_price
-    _sl = _entry + stop_dist
-    _tp = _entry - stop_dist * 3
+    _sl = ema_mid
+    _tp = _entry - (ema_mid - _entry) * 3
     line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
     line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
     line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
 
-plot(upper_kc, "Upper KC", color.red)
-plot(lower_kc, "Lower KC", color.green)
-plot(ema, "EMA", color.blue)
-
----
-
-SWING #6: Multi-Timeframe EMA Stack (Higher Bias)
-TF: 30m entry / 4H bias | Type: Long/Short | Target: 1:2.5 R/R
-
-pinescript
-//@version=5
-strategy("SWING6: MTF EMA Stack - Risk Based", overlay=true, initial_capital=100000, currency="USD")
-
-// === INPUTS ===
-risk_per_trade = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=5)
-htf_ema = input.int(20, "HTF EMA (4H bias)")
-ltf_fast = input.int(9, "LTF Fast EMA")
-ltf_slow = input.int(21, "LTF Slow EMA")
-
-trade_mon = input.bool(true, "Monday")
-trade_tue = input.bool(true, "Tuesday")
-trade_wed = input.bool(true, "Wednesday")
-trade_thu = input.bool(true, "Thursday")
-trade_fri = input.bool(true, "Friday")
-trade_sat = input.bool(true, "Saturday")
-trade_sun = input.bool(true, "Sunday")
-show_trade_lines = input.bool(true, "Show Trade Lines")
-trade_line_bars = input.int(45, "Trade Line Bars", minval=1, maxval=100)
-
-// === MTF INDICATORS ===
-htf_close = request.security(syminfo.tickerid, "240", close)
-htf_ema_val = request.security(syminfo.tickerid, "240", ta.ema(close, htf_ema))
-
-ltf_fast_ema = ta.ema(close, ltf_fast)
-ltf_slow_ema = ta.ema(close, ltf_slow)
-atr = ta.atr(14)
-
-// === FILTERS ===
-dow = dayofweek
-allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
-
-bull_bias = htf_close > htf_ema_val
-bear_bias = htf_close < htf_ema_val
-
-// === POSITION SIZING ===
-risk_amount = strategy.equity * risk_per_trade / 100
-stop_dist = atr * 2
-qty = risk_amount / stop_dist
-
-// === ENTRIES ===
-bull_cross = ta.crossover(ltf_fast_ema, ltf_slow_ema)
-bear_cross = ta.crossunder(ltf_fast_ema, ltf_slow_ema)
-
-long_cond = bull_bias and bull_cross and allow_day
-short_cond = bear_bias and bear_cross and allow_day
-
-// === EXECUTION ===
-if long_cond and strategy.position_size == 0
-    strategy.entry("Long", strategy.long, qty=qty)
-    strategy.exit("Exit", "Long", loss=close - stop_dist, profit=close + (stop_dist * 2.5))
-
-if short_cond and strategy.position_size == 0
-    strategy.entry("Short", strategy.sh
-[08.04.2026 04:30] TVRemix: ort, qty=qty)
-    strategy.exit("Exit", "Short", loss=close + stop_dist, profit=close - (stop_dist * 2.5))
-
-// === Trade Lines ===
-if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
-    _entry = strategy.position_avg_price
-    _sl = _entry - stop_dist
-    _tp = _entry + stop_dist * 2.5
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
-
-if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
-    _entry = strategy.position_avg_price
-    _sl = _entry + stop_dist
-    _tp = _entry - stop_dist * 2.5
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
-
-plot(ltf_fast_ema, "Fast", color.blue)
-plot(ltf_slow_ema, "Slow", color.red)
-bgcolor(bull_bias ? color.new(color.green, 90) : bear_bias ? color.new(color.red, 90) : na)
+plot(upper_kc, 'Upper KC', color.red)
+plot(lower_kc, 'Lower KC', color.green)
+plot(ema_mid, 'EMA Mid', color.blue)

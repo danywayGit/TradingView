@@ -1,5 +1,4 @@
-pinescript
-//@version=5
+//@version=6
 // SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
 // SWING #4: MACD Divergence (Momentum Reversal)
 // TF: 2H | Type: Long/Short | Target: 1:2 R/R
@@ -15,24 +14,24 @@ pinescript
 // Stop loss:     ATR × 2 below/above entry.
 // Take profit:   SL distance × 2 (1:2 R:R).
 
-strategy("SWING4: MACD Divergence - Risk Based", overlay=true, initial_capital=100000, currency="USD")
+strategy('SWING4: MACD Divergence - Risk Based', overlay = true, initial_capital = 100000, currency = 'USD')
 
 // === INPUTS ===
-risk_per_trade = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=5)
-macd_fast = input.int(12, "MACD Fast")
-macd_slow = input.int(26, "MACD Slow")
-macd_signal = input.int(9, "MACD Signal")
-rsi_period = input.int(14, "RSI Period")
+risk_per_trade = input.float(1.0, 'Risk % per Trade', minval = 0.1, maxval = 5)
+macd_fast = input.int(12, 'MACD Fast')
+macd_slow = input.int(26, 'MACD Slow')
+macd_signal = input.int(9, 'MACD Signal')
+rsi_period = input.int(14, 'RSI Period')
 
-trade_mon = input.bool(true, "Monday")
-trade_tue = input.bool(true, "Tuesday")
-trade_wed = input.bool(true, "Wednesday")
-trade_thu = input.bool(true, "Thursday")
-trade_fri = input.bool(true, "Friday")
-trade_sat = input.bool(true, "Saturday")
-trade_sun = input.bool(true, "Sunday")
-show_trade_lines = input.bool(true, "Show Trade Lines")
-trade_line_bars = input.int(45, "Trade Line Bars", minval=1, maxval=100)
+trade_mon = input.bool(true, 'Monday')
+trade_tue = input.bool(true, 'Tuesday')
+trade_wed = input.bool(true, 'Wednesday')
+trade_thu = input.bool(true, 'Thursday')
+trade_fri = input.bool(true, 'Friday')
+trade_sat = input.bool(true, 'Saturday')
+trade_sun = input.bool(true, 'Sunday')
+show_trade_lines = input.bool(true, 'Show Trade Lines')
+trade_line_bars = input.int(45, 'Trade Line Bars', minval = 1, maxval = 100)
 
 // === INDICATORS ===
 [macd_line, signal_line, hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
@@ -40,17 +39,17 @@ rsi = ta.rsi(close, rsi_period)
 atr = ta.atr(14)
 
 // === DIVERGENCE DETECTION ===
-price_ll = ta.lowest(low, 5)[1] > low
-hist_hl = ta.lowest(hist, 5)[1] < hist
+price_ll = ta.lowest(low, 5)[1] > low // price makes new low
+hist_hl = ta.lowest(hist, 5)[1] < hist // histogram does NOT confirm (higher low)
 bull_div = price_ll and hist_hl
 
-price_hh = ta.highest(high, 5)[1] < high
-hist_lh = ta.highest(hist, 5)[1] > hist
+price_hh = ta.highest(high, 5)[1] < high // price makes new high
+hist_lh = ta.highest(hist, 5)[1] > hist // histogram does NOT confirm (lower high)
 bear_div = price_hh and hist_lh
 
 // === FILTERS ===
 dow = dayofweek
-allow_day = (dow == 1 and trade_mon) or (dow == 2 and trade_tue) or (dow == 3 and trade_wed) or (dow == 4 and trade_thu) or (dow == 5 and trade_fri) or (dow == 6 and trade_sat) or (dow == 7 and trade_sun)
+allow_day = dow == 1 and trade_mon or dow == 2 and trade_tue or dow == 3 and trade_wed or dow == 4 and trade_thu or dow == 5 and trade_fri or dow == 6 and trade_sat or dow == 7 and trade_sun
 
 // === POSITION SIZING ===
 risk_amount = strategy.equity * risk_per_trade / 100
@@ -63,13 +62,12 @@ short_cond = bear_div and rsi > 55 and allow_day
 
 // === EXECUTION ===
 if long_cond and strategy.position_size == 0
-    strategy.entry("Long", strategy.long, qty=qty)
-    strategy.exit("Exit", "Long", loss=close - stop_dist,
-[08.04.2026 04:30] TVRemix: profit=close + (stop_dist * 2))
+    strategy.entry('Long', strategy.long, qty = qty)
+    strategy.exit('Exit', 'Long', stop = close - stop_dist, limit = close + stop_dist * 2)
 
 if short_cond and strategy.position_size == 0
-    strategy.entry("Short", strategy.short, qty=qty)
-    strategy.exit("Exit", "Short", loss=close + stop_dist, profit=close - (stop_dist * 2))
+    strategy.entry('Short', strategy.short, qty = qty)
+    strategy.exit('Exit', 'Short', stop = close + stop_dist, limit = close - stop_dist * 2)
 
 // === Trade Lines ===
 if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
