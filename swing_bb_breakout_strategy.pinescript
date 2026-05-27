@@ -25,6 +25,9 @@ macd_fast = input.int(12, 'MACD Fast')
 macd_slow = input.int(26, 'MACD Slow')
 macd_signal = input.int(9, 'MACD Signal')
 
+stop_dist_mult = input.float(2.2, 'Stop loss ATR Mult', minval = 0.1, maxval = 5)
+risk_reward_ratio = input.float(2, 'Take profit target (RRR)', minval = 0.1, maxval = 8)
+
 trade_mon = input.bool(true, 'Monday')
 trade_tue = input.bool(true, 'Tuesday')
 trade_wed = input.bool(true, 'Wednesday')
@@ -55,7 +58,7 @@ allow_day = dow == 1 and trade_mon or dow == 2 and trade_tue or dow == 3 and tra
 
 // === POSITION SIZING ===
 risk_amount = strategy.equity * risk_per_trade / 100
-stop_dist = atr * 2.5
+stop_dist = atr * stop_dist_mult
 qty = risk_amount / stop_dist
 
 // === ENTRIES ===
@@ -65,17 +68,17 @@ short_cond = was_squeezed and close < lower_bb and macd_line < signal_line and a
 // === EXECUTION ===
 if long_cond and strategy.position_size == 0
     strategy.entry('Long', strategy.long, qty = qty)
-    strategy.exit('Exit', 'Long', stop = close - stop_dist, limit = close + stop_dist * 2.5)
+    strategy.exit('Exit', 'Long', stop = close - stop_dist, limit = close + stop_dist * risk_reward_ratio)
 
 if short_cond and strategy.position_size == 0
     strategy.entry('Short', strategy.short, qty = qty)
-    strategy.exit('Exit', 'Short', stop = close + stop_dist, limit = close - stop_dist * 2.5)
+    strategy.exit('Exit', 'Short', stop = close + stop_dist, limit = close - stop_dist * risk_reward_ratio)
 
 // === Trade Lines ===
 if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
     _entry = strategy.position_avg_price
     _sl = _entry - stop_dist
-    _tp = _entry + stop_dist * 2.5
+    _tp = _entry + stop_dist * risk_reward_ratio
     line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
     line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
     line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
@@ -83,7 +86,7 @@ if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1]
 if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
     _entry = strategy.position_avg_price
     _sl = _entry + stop_dist
-    _tp = _entry - stop_dist * 2.5
+    _tp = _entry - stop_dist * risk_reward_ratio
     line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
     line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
     line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
