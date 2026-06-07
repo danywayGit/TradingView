@@ -1,6 +1,6 @@
 //@version=6
 // VP1: Volume Profile Breakout (VAH / VAL + Volume Spike)
-// Optimised: TRXUSDT · 15m · Long & Short · Fixed-% SL/TP
+// Optimised: TRXUSDT · 15m · Long Only · Fixed-% SL/TP
 // Best combo: MON+TUE+WED+FRI+SAT · W-Sharpe 4.55 · S2-Sharpe 4.21
 //
 // Concept: Approximate a volume profile over a rolling lookback window.
@@ -25,7 +25,7 @@ stop_loss_pct   = input.float(1.5, 'Stop Loss %',    minval=0.1, maxval=20, grou
 take_profit_pct = input.float(3.0, 'Take Profit %',  minval=0.1, maxval=50, group='Risk')
 
 // === STRATEGY ===
-direction        = input.string('Both', 'Direction', options=['Long','Short','Both'], group='Strategy')
+direction        = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
 profile_lookback = input.int(200,  'Profile Lookback', minval=20,  group='Strategy')
 value_area_pct   = input.int(80,   'Value Area %',     minval=50, maxval=99, group='Strategy')
 vol_spike_mult   = input.float(2.0,'Volume Spike Mult',minval=0.5, group='Strategy')
