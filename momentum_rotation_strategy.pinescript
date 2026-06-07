@@ -1,0 +1,134 @@
+//@version=6
+// MO1: Cross-Asset Momentum Rotation (Relative RSI vs BTC)
+// Optimised: SUIUSDT · 15m · Long only · ATR Trailing SL
+// Best combo: MON+TUE+WED+FRI+SAT+SUN · W-Sharpe 4.21 · S2-Sharpe 3.90
+//
+// Concept: Enter long when the target asset's RSI outperforms BTCUSDT by
+//          a meaningful margin (momentum_threshold) AND ADX confirms a trend.
+//          The edge is in WHICH asset to trade, not just when.
+//
+// Entry:   RSI(symbol) − RSI(BTCUSDT) > momentum_threshold
+//          + ADX(14) > adx_trend_confirm on the current symbol.
+// SL:      ATR(14) × atr_stop_mult — trailing, moves up with price, never widens.
+// TP:      No fixed TP — trailing stop runs until price pulls back atr_stop_mult ATRs.
+// Exit:    ADX < adx_exit_fade (trend dying) OR trailing stop hit.
+// Sizing:  (equity × risk %) / (ATR × atr_stop_mult)
+
+strategy('MO1: Momentum Rotation (Relative RSI)', overlay=true, initial_capital=100000, currency='USD',
+         default_qty_type=strategy.fixed, default_qty_value=1)
+
+// === RISK ===
+risk_per_trade = input.float(1.0, 'Risk % / Trade', minval=0.1, maxval=5,  group='Risk')
+atr_stop_mult  = input.float(2.0, 'ATR Trail Mult', minval=0.5, maxval=10, group='Risk')
+
+// === STRATEGY ===
+direction          = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
+rsi_period         = input.int(10,  'RSI Period',           minval=2,   group='Strategy')
+momentum_threshold = input.float(3.0,'Momentum Threshold',  minval=0.5, group='Strategy')
+adx_trend_confirm  = input.int(25,  'ADX Entry Min',        minval=10,  group='Strategy')
+adx_exit_fade      = input.int(15,  'ADX Exit (fade)',      minval=5,   group='Strategy')
+cooldown_bars      = input.int(5,   'Cooldown After Exit',  minval=1,   group='Strategy')
+btc_ticker         = input.string('BINANCE:BTCUSDT.P', 'BTC Ticker (benchmark)', group='Strategy')
+
+// === DAY FILTER — defaults = MON+TUE+WED+FRI+SAT+SUN (best combo, no THU) ===
+trade_mon = input.bool(true,  'Mon', group='Days', inline='d')
+trade_tue = input.bool(true,  'Tue', group='Days', inline='d')
+trade_wed = input.bool(true,  'Wed', group='Days', inline='d')
+trade_thu = input.bool(false, 'Thu', group='Days', inline='d')
+trade_fri = input.bool(true,  'Fri', group='Days', inline='d')
+trade_sat = input.bool(true,  'Sat', group='Days', inline='d')
+trade_sun = input.bool(true,  'Sun', group='Days', inline='d')
+
+// === VISUALS ===
+show_lines = input.bool(true, 'Show Trade Lines', group='Visual')
+line_bars  = input.int(60, 'Line Bars', minval=1, maxval=200, group='Visual')
+
+// === INDICATORS ===
+rsi_sym     = ta.rsi(close, rsi_period)
+btc_close   = request.security(btc_ticker, timeframe.period, close, lookahead=barmerge.lookahead_off)
+rsi_btc     = ta.rsi(btc_close, rsi_period)
+rel_mom     = rsi_sym - rsi_btc        // positive = outperforming BTC
+
+[_, _, adx] = ta.dmi(14, 14)
+atr14       = ta.atr(14)
+
+// === COOLDOWN TRACKER ===
+var int bars_since_exit = cooldown_bars + 1
+if strategy.position_size == 0 and strategy.position_size[1] != 0
+    bars_since_exit := 0
+bars_since_exit := bars_since_exit + 1
+cooled_down = bars_since_exit >= cooldown_bars
+
+// === DAY FILTER ===
+allow_day = (dayofweek == dayofweek.monday    and trade_mon) or
+            (dayofweek == dayofweek.tuesday   and trade_tue) or
+            (dayofweek == dayofweek.wednesday and trade_wed) or
+            (dayofweek == dayofweek.thursday  and trade_thu) or
+            (dayofweek == dayofweek.friday    and trade_fri) or
+            (dayofweek == dayofweek.saturday  and trade_sat) or
+            (dayofweek == dayofweek.sunday    and trade_sun)
+
+long_ok  = direction == 'Long'  or direction == 'Both'
+short_ok = direction == 'Short' or direction == 'Both'
+
+// === POSITION SIZING ===
+risk_amt  = strategy.equity * risk_per_trade / 100
+stop_dist = atr14 * atr_stop_mult
+qty       = stop_dist > 0 ? risk_amt / stop_dist : 0
+
+// === ENTRIES ===
+long_cond  = rel_mom >  momentum_threshold and adx >= adx_trend_confirm and cooled_down and allow_day and long_ok  and strategy.position_size == 0
+short_cond = rel_mom < -momentum_threshold and adx >= adx_trend_confirm and cooled_down and allow_day and short_ok and strategy.position_size == 0
+
+if long_cond and qty > 0
+    strategy.entry('Long',  strategy.long,  qty=qty)
+
+if short_cond and qty > 0
+    strategy.entry('Short', strategy.short, qty=qty)
+
+// === TRAILING STOP ===
+var float trail_long  = na
+var float trail_short = na
+
+if strategy.position_size > 0
+    trail_long  := na(trail_long) ? close - stop_dist : math.max(trail_long, close - stop_dist)
+    if close < trail_long
+        strategy.close('Long', comment='Trail SL')
+        trail_long := na
+
+if strategy.position_size < 0
+    trail_short := na(trail_short) ? close + stop_dist : math.min(trail_short, close + stop_dist)
+    if close > trail_short
+        strategy.close('Short', comment='Trail SL')
+        trail_short := na
+
+if strategy.position_size == 0
+    trail_long  := na
+    trail_short := na
+
+// ADX fade exit
+if strategy.position_size > 0  and adx < adx_exit_fade
+    strategy.close('Long',  comment='ADX fade')
+if strategy.position_size < 0  and adx < adx_exit_fade
+    strategy.close('Short', comment='ADX fade')
+
+// === TRADE LINES ===
+if show_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    e  = strategy.position_avg_price
+    sd = atr14 * atr_stop_mult
+    line.new(bar_index, e,    bar_index+line_bars, e,    color=color.white, width=2)
+    line.new(bar_index, e-sd, bar_index+line_bars, e-sd, color=color.red,   width=2, style=line.style_dashed)
+    label.new(bar_index+line_bars, e-sd, 'Trailing SL\n(moves up)', color=color.red, style=label.style_label_left, size=size.tiny)
+
+if show_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    e  = strategy.position_avg_price
+    sd = atr14 * atr_stop_mult
+    line.new(bar_index, e,    bar_index+line_bars, e,    color=color.white, width=2)
+    line.new(bar_index, e+sd, bar_index+line_bars, e+sd, color=color.red,   width=2, style=line.style_dashed)
+
+// Trailing stop level plot
+plot(strategy.position_size > 0 ? trail_long : na,  'Trail Long SL',  color=color.red,   linewidth=1, style=plot.style_stepline)
+plot(strategy.position_size < 0 ? trail_short : na, 'Trail Short SL', color=color.red,   linewidth=1, style=plot.style_stepline)
+
+plotshape(long_cond,  'Long',  shape.triangleup,   location.belowbar, color.green, size=size.small)
+plotshape(short_cond, 'Short', shape.triangledown, location.abovebar, color.red,   size=size.small)

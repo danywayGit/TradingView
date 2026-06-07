@@ -1,87 +1,99 @@
 //@version=6
-// SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
-// SWING #5: Keltner Breakout (Trend Continuation)
-// TF: 1H | Type: Long/Short | Target: 1:3 R/R
+// SWING5: Keltner Channel Breakout (Trend Continuation)
+// Optimised: SUIUSDT · 4H · Long only · ATR SL
+// Best combo: TUE+THU+FRI+SAT+SUN · W-Sharpe 3.81 · S2-Sharpe 3.07
 //
-// Description:
-//   Keltner Channel breakout strategy. Enters when price closes outside the Keltner
-//   Channel bands (EMA ± ATR × multiplier), confirmed by CCI not being at an extreme.
-//   Targets trend continuation after a volatility breakout.
-//
-// Main idea:     Buy breakouts above the upper Keltner band or sell breakdowns below
-//               the lower band, filtered by CCI to avoid over-extended entries.
-// Max hold bars: NA — exits managed by EMA stop and 1:3 R:R TP.
-// Stop loss:     EMA (Keltner midline) at entry — price returning to midline = failed breakout.
-// Take profit:   Entry price ± SL distance × 3 (1:3 R:R).
+// Entry:   Price closes above upper Keltner Channel (bullish breakout)
+//          filtered by CCI not in oversold extreme for longs.
+// SL:      ATR × atr_stop_mult below/above entry (default 2.0 ×)
+// TP:      SL distance × rr_ratio (default 2.0 × = 1:2 R:R)
+// Sizing:  (equity × risk %) / ATR-based stop distance
 
+strategy('SWING5: Keltner Breakout', overlay=true, initial_capital=100000, currency='USD',
+         default_qty_type=strategy.fixed, default_qty_value=1)
 
-strategy('SWING5: Keltner Breakout - Risk Based', overlay = true, initial_capital = 100000, currency = 'USD')
+// === RISK ===
+risk_per_trade = input.float(1.0, 'Risk % / Trade', minval=0.1, maxval=5,  group='Risk')
+atr_stop_mult  = input.float(2.0, 'ATR Stop Mult',  minval=0.5, maxval=10, group='Risk')
+rr_ratio       = input.float(2.0, 'R:R Ratio',      minval=0.5, maxval=10, group='Risk')
 
-// === INPUTS ===
-risk_per_trade = input.float(1.0, 'Risk % per Trade', minval = 0.1, maxval = 5)
-kc_length = input.int(20, 'KC Length')
-kc_mult = input.float(2.0, 'KC Multiplier')
-cci_period = input.int(20, 'CCI Period')
+// === STRATEGY ===
+direction    = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
+kc_length    = input.int(15,   'KC Length',   minval=5,   group='Strategy')
+kc_mult      = input.float(1.5,'KC Mult',     minval=0.5, group='Strategy')
+cci_period   = input.int(14,   'CCI Period',  minval=2,   group='Strategy')
+cci_long_min = input.int(-100, 'CCI Min (Long)',  group='Strategy')
+cci_short_max= input.int(0,    'CCI Max (Short)', group='Strategy')
 
-trade_mon = input.bool(true, 'Monday')
-trade_tue = input.bool(true, 'Tuesday')
-trade_wed = input.bool(true, 'Wednesday')
-trade_thu = input.bool(true, 'Thursday')
-trade_fri = input.bool(true, 'Friday')
-trade_sat = input.bool(true, 'Saturday')
-trade_sun = input.bool(true, 'Sunday')
-show_trade_lines = input.bool(true, 'Show Trade Lines')
-trade_line_bars = input.int(45, 'Trade Line Bars', minval = 1, maxval = 100)
+// === DAY FILTER — defaults = TUE+THU+FRI+SAT+SUN (best combo) ===
+trade_mon = input.bool(false, 'Mon', group='Days', inline='d')
+trade_tue = input.bool(true,  'Tue', group='Days', inline='d')
+trade_wed = input.bool(false, 'Wed', group='Days', inline='d')
+trade_thu = input.bool(true,  'Thu', group='Days', inline='d')
+trade_fri = input.bool(true,  'Fri', group='Days', inline='d')
+trade_sat = input.bool(true,  'Sat', group='Days', inline='d')
+trade_sun = input.bool(true,  'Sun', group='Days', inline='d')
+
+// === VISUALS ===
+show_lines = input.bool(true, 'Show Trade Lines', group='Visual')
+line_bars  = input.int(45, 'Line Bars', minval=1, maxval=200, group='Visual')
 
 // === INDICATORS ===
-ema_mid = ta.ema(close, kc_length)
-atr = ta.atr(kc_length)
+ema_mid  = ta.ema(close, kc_length)
+atr      = ta.atr(kc_length)
 upper_kc = ema_mid + kc_mult * atr
 lower_kc = ema_mid - kc_mult * atr
-cci = ta.cci(close, cci_period)
+cci      = ta.cci(close, cci_period)
+atr14    = ta.atr(14)
 
-// === FILTERS ===
-dow = dayofweek
-allow_day = dow == 1 and trade_mon or dow == 2 and trade_tue or dow == 3 and trade_wed or dow == 4 and trade_thu or dow == 5 and trade_fri or dow == 6 and trade_sat or dow == 7 and trade_sun
+// === DAY FILTER ===
+allow_day = (dayofweek == dayofweek.monday    and trade_mon) or
+            (dayofweek == dayofweek.tuesday   and trade_tue) or
+            (dayofweek == dayofweek.wednesday and trade_wed) or
+            (dayofweek == dayofweek.thursday  and trade_thu) or
+            (dayofweek == dayofweek.friday    and trade_fri) or
+            (dayofweek == dayofweek.saturday  and trade_sat) or
+            (dayofweek == dayofweek.sunday    and trade_sun)
+
+long_ok  = direction == 'Long'  or direction == 'Both'
+short_ok = direction == 'Short' or direction == 'Both'
 
 // === POSITION SIZING ===
-// Stop distance = distance from entry to EMA midline
-risk_amount = strategy.equity * risk_per_trade / 100
-stop_dist_long = close - ema_mid // how far we are above EMA
-stop_dist_short = ema_mid - close // how far we are below EMA
-qty_long = stop_dist_long > 0 ? risk_amount / stop_dist_long : 0
-qty_short = stop_dist_short > 0 ? risk_amount / stop_dist_short : 0
+risk_amt  = strategy.equity * risk_per_trade / 100
+stop_dist = atr14 * atr_stop_mult
+qty       = stop_dist > 0 ? risk_amt / stop_dist : 0
 
 // === ENTRIES ===
-long_cond = close > upper_kc and cci > -100 and allow_day
-short_cond = close < lower_kc and cci < 100 and allow_day
+long_cond  = close > upper_kc and cci > cci_long_min  and allow_day and long_ok  and strategy.position_size == 0
+short_cond = close < lower_kc and cci < cci_short_max and allow_day and short_ok and strategy.position_size == 0
 
-// === EXECUTION ===
-if long_cond and strategy.position_size == 0 and qty_long > 0
-    strategy.entry('Long', strategy.long, qty = qty_long)
-    strategy.exit('Exit', 'Long', stop = ema_mid, limit = close + stop_dist_long * 3)
+if long_cond and qty > 0
+    sl = close - stop_dist
+    tp = close + stop_dist * rr_ratio
+    strategy.entry('Long',  strategy.long,  qty=qty)
+    strategy.exit ('Exit L','Long',  stop=sl, limit=tp)
 
-if short_cond and strategy.position_size == 0 and qty_short > 0
-    strategy.entry('Short', strategy.short, qty = qty_short)
-    strategy.exit('Exit', 'Short', stop = ema_mid, limit = close - stop_dist_short * 3)
+if short_cond and qty > 0
+    sl = close + stop_dist
+    tp = close - stop_dist * rr_ratio
+    strategy.entry('Short', strategy.short, qty=qty)
+    strategy.exit ('Exit S','Short', stop=sl, limit=tp)
 
-// === Trade Lines ===
-if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
-    _entry = strategy.position_avg_price
-    _sl = ema_mid
-    _tp = _entry + (_entry - ema_mid) * 3
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+// === TRADE LINES ===
+if show_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    e  = strategy.position_avg_price
+    sd = atr14 * atr_stop_mult
+    line.new(bar_index, e,          bar_index+line_bars, e,          color=color.white, width=2)
+    line.new(bar_index, e-sd,       bar_index+line_bars, e-sd,       color=color.red,   width=2)
+    line.new(bar_index, e+sd*rr_ratio, bar_index+line_bars, e+sd*rr_ratio, color=color.green, width=2)
 
-if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
-    _entry = strategy.position_avg_price
-    _sl = ema_mid
-    _tp = _entry - (ema_mid - _entry) * 3
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+if show_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    e  = strategy.position_avg_price
+    sd = atr14 * atr_stop_mult
+    line.new(bar_index, e,          bar_index+line_bars, e,          color=color.white, width=2)
+    line.new(bar_index, e+sd,       bar_index+line_bars, e+sd,       color=color.red,   width=2)
+    line.new(bar_index, e-sd*rr_ratio, bar_index+line_bars, e-sd*rr_ratio, color=color.green, width=2)
 
-plot(upper_kc, 'Upper KC', color.red)
-plot(lower_kc, 'Lower KC', color.green)
-plot(ema_mid, 'EMA Mid', color.blue)
+plot(upper_kc, 'Upper KC', color.red,   linewidth=1)
+plot(lower_kc, 'Lower KC', color.green, linewidth=1)
+plot(ema_mid,  'EMA Mid',  color.blue,  linewidth=1)

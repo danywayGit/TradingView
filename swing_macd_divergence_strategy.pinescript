@@ -1,87 +1,101 @@
 //@version=6
-// SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
-// SWING #4: MACD Divergence (Momentum Reversal)
-// TF: 2H | Type: Long/Short | Target: 1:2 R/R
+// SWING4: MACD Divergence (Momentum Reversal)
+// Optimised: ENAUSDT · 1H · Long only · Fixed-% SL/TP
+// Best combo: MON+THU+FRI+SUN · W-Sharpe 6.32 · S2-Sharpe 4.83
+// ⚠️  ENAUSDT has ~9 months of history (Apr–Dec 2024) — paper trade before live
 //
-// Description:
-//   MACD histogram divergence swing strategy. Detects bullish divergence (price makes a
-//   lower low but MACD histogram makes a higher low) and bearish divergence (opposite),
-//   then confirms with RSI. Trades momentum reversals at trend exhaustion points.
-//
-// Main idea:     Enter counter-trend when MACD histogram diverges from price and RSI
-//               confirms the momentum shift.
-// Max hold bars: NA — exits managed by ATR-based SL (2×) and 1:2 R:R TP.
-// Stop loss:     ATR × 2 below/above entry.
-// Take profit:   SL distance × 2 (1:2 R:R).
+// Entry:   Bullish MACD histogram divergence (price new low, histogram higher low)
+//          confirmed by RSI ≤ rsi_long_max; inverse for shorts.
+// SL:      Fixed % below entry (default 2.5 %)
+// TP:      Fixed % above entry (default 8.0 %)
+// Sizing:  (equity × risk %) / stop_distance in price
 
-strategy('SWING4: MACD Divergence - Risk Based', overlay = true, initial_capital = 100000, currency = 'USD')
+strategy('SWING4: MACD Divergence', overlay=true, initial_capital=100000, currency='USD',
+         default_qty_type=strategy.fixed, default_qty_value=1)
 
-// === INPUTS ===
-risk_per_trade = input.float(1.0, 'Risk % per Trade', minval = 0.1, maxval = 5)
-macd_fast = input.int(12, 'MACD Fast')
-macd_slow = input.int(26, 'MACD Slow')
-macd_signal = input.int(9, 'MACD Signal')
-rsi_period = input.int(14, 'RSI Period')
+// === RISK ===
+risk_per_trade  = input.float(1.0, 'Risk % / Trade', minval=0.1, maxval=5,  group='Risk')
+stop_loss_pct   = input.float(2.5, 'Stop Loss %',    minval=0.1, maxval=20, group='Risk')
+take_profit_pct = input.float(8.0, 'Take Profit %',  minval=0.1, maxval=50, group='Risk')
 
-trade_mon = input.bool(true, 'Monday')
-trade_tue = input.bool(true, 'Tuesday')
-trade_wed = input.bool(true, 'Wednesday')
-trade_thu = input.bool(true, 'Thursday')
-trade_fri = input.bool(true, 'Friday')
-trade_sat = input.bool(true, 'Saturday')
-trade_sun = input.bool(true, 'Sunday')
-show_trade_lines = input.bool(true, 'Show Trade Lines')
-trade_line_bars = input.int(45, 'Trade Line Bars', minval = 1, maxval = 100)
+// === STRATEGY ===
+direction    = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
+macd_fast    = input.int(10, 'MACD Fast',           minval=1, group='Strategy')
+macd_slow    = input.int(24, 'MACD Slow',           minval=1, group='Strategy')
+macd_sig     = input.int(7,  'MACD Signal',         minval=1, group='Strategy')
+rsi_period   = input.int(10, 'RSI Period',          minval=1, group='Strategy')
+div_lookback = input.int(3,  'Divergence Lookback', minval=2, maxval=20, group='Strategy')
+rsi_long_max = input.int(50, 'RSI Max (Long)',      group='Strategy')
+rsi_short_min= input.int(50, 'RSI Min (Short)',     group='Strategy')
+
+// === DAY FILTER — defaults = MON+THU+FRI+SUN (best combo) ===
+trade_mon = input.bool(true,  'Mon', group='Days', inline='d')
+trade_tue = input.bool(false, 'Tue', group='Days', inline='d')
+trade_wed = input.bool(false, 'Wed', group='Days', inline='d')
+trade_thu = input.bool(true,  'Thu', group='Days', inline='d')
+trade_fri = input.bool(true,  'Fri', group='Days', inline='d')
+trade_sat = input.bool(false, 'Sat', group='Days', inline='d')
+trade_sun = input.bool(true,  'Sun', group='Days', inline='d')
+
+// === VISUALS ===
+show_lines = input.bool(true, 'Show Trade Lines', group='Visual')
+line_bars  = input.int(45, 'Line Bars', minval=1, maxval=200, group='Visual')
 
 // === INDICATORS ===
-[macd_line, signal_line, hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
-rsi = ta.rsi(close, rsi_period)
-atr = ta.atr(14)
+[_, _, hist] = ta.macd(close, macd_fast, macd_slow, macd_sig)
+rsi          = ta.rsi(close, rsi_period)
 
 // === DIVERGENCE DETECTION ===
-price_ll = ta.lowest(low, 5)[1] > low // price makes new low
-hist_hl = ta.lowest(hist, 5)[1] < hist // histogram does NOT confirm (higher low)
-bull_div = price_ll and hist_hl
+// Bullish: price makes new low but histogram does NOT confirm (higher low = momentum diverges)
+bull_div = low  < ta.lowest(low,  div_lookback)[1] and hist > ta.lowest(hist, div_lookback)[1]
+// Bearish: price makes new high but histogram does NOT confirm (lower high)
+bear_div = high > ta.highest(high, div_lookback)[1] and hist < ta.highest(hist, div_lookback)[1]
 
-price_hh = ta.highest(high, 5)[1] < high // price makes new high
-hist_lh = ta.highest(hist, 5)[1] > hist // histogram does NOT confirm (lower high)
-bear_div = price_hh and hist_lh
+// === DAY FILTER ===
+allow_day = (dayofweek == dayofweek.monday    and trade_mon) or
+            (dayofweek == dayofweek.tuesday   and trade_tue) or
+            (dayofweek == dayofweek.wednesday and trade_wed) or
+            (dayofweek == dayofweek.thursday  and trade_thu) or
+            (dayofweek == dayofweek.friday    and trade_fri) or
+            (dayofweek == dayofweek.saturday  and trade_sat) or
+            (dayofweek == dayofweek.sunday    and trade_sun)
 
-// === FILTERS ===
-dow = dayofweek
-allow_day = dow == 1 and trade_mon or dow == 2 and trade_tue or dow == 3 and trade_wed or dow == 4 and trade_thu or dow == 5 and trade_fri or dow == 6 and trade_sat or dow == 7 and trade_sun
+long_ok  = (direction == 'Long'  or direction == 'Both')
+short_ok = (direction == 'Short' or direction == 'Both')
 
 // === POSITION SIZING ===
-risk_amount = strategy.equity * risk_per_trade / 100
-stop_dist = atr * 2
-qty = risk_amount / stop_dist
+risk_amt   = strategy.equity * risk_per_trade / 100
+stop_dist  = close * stop_loss_pct / 100
+qty        = stop_dist > 0 ? risk_amt / stop_dist : 0
 
 // === ENTRIES ===
-long_cond = bull_div and rsi < 45 and allow_day
-short_cond = bear_div and rsi > 55 and allow_day
+long_cond  = bull_div and rsi <= rsi_long_max  and allow_day and long_ok  and strategy.position_size == 0
+short_cond = bear_div and rsi >= rsi_short_min and allow_day and short_ok and strategy.position_size == 0
 
-// === EXECUTION ===
-if long_cond and strategy.position_size == 0
-    strategy.entry('Long', strategy.long, qty = qty)
-    strategy.exit('Exit', 'Long', stop = close - stop_dist, limit = close + stop_dist * 2)
+if long_cond and qty > 0
+    sl = close * (1 - stop_loss_pct   / 100)
+    tp = close * (1 + take_profit_pct / 100)
+    strategy.entry('Long',  strategy.long,  qty=qty)
+    strategy.exit ('Exit L','Long',  stop=sl, limit=tp)
 
-if short_cond and strategy.position_size == 0
-    strategy.entry('Short', strategy.short, qty = qty)
-    strategy.exit('Exit', 'Short', stop = close + stop_dist, limit = close - stop_dist * 2)
+if short_cond and qty > 0
+    sl = close * (1 + stop_loss_pct   / 100)
+    tp = close * (1 - take_profit_pct / 100)
+    strategy.entry('Short', strategy.short, qty=qty)
+    strategy.exit ('Exit S','Short', stop=sl, limit=tp)
 
-// === Trade Lines ===
-if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
-    _entry = strategy.position_avg_price
-    _sl = _entry - stop_dist
-    _tp = _entry + stop_dist * 2
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+// === TRADE LINES ===
+if show_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    e = strategy.position_avg_price
+    line.new(bar_index, e,                                    bar_index+line_bars, e,                                    color=color.white, width=2)
+    line.new(bar_index, e*(1-stop_loss_pct/100),              bar_index+line_bars, e*(1-stop_loss_pct/100),              color=color.red,   width=2)
+    line.new(bar_index, e*(1+take_profit_pct/100),            bar_index+line_bars, e*(1+take_profit_pct/100),            color=color.green, width=2)
 
-if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
-    _entry = strategy.position_avg_price
-    _sl = _entry + stop_dist
-    _tp = _entry - stop_dist * 2
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+if show_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    e = strategy.position_avg_price
+    line.new(bar_index, e,                                    bar_index+line_bars, e,                                    color=color.white, width=2)
+    line.new(bar_index, e*(1+stop_loss_pct/100),              bar_index+line_bars, e*(1+stop_loss_pct/100),              color=color.red,   width=2)
+    line.new(bar_index, e*(1-take_profit_pct/100),            bar_index+line_bars, e*(1-take_profit_pct/100),            color=color.green, width=2)
+
+plotshape(long_cond,  title='Long',  style=shape.triangleup,   location=location.belowbar, color=color.green, size=size.small)
+plotshape(short_cond, title='Short', style=shape.triangledown, location=location.abovebar, color=color.red,   size=size.small)

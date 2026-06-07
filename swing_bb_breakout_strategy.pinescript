@@ -1,96 +1,103 @@
 //@version=6
-// SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
-// SWING #2: Bollinger Squeeze Breakout (Volatility Expansion)
-// TF: 4H | Type: Long/Short | Target: 1:2.5 R/R
+// SWING2: Bollinger Band Squeeze Breakout (Volatility Expansion)
+// Optimised: TRXUSDT · 15m · Long only · Fixed-% SL/TP
+// Best combo: MON · W-Sharpe 3.66 · S2-Sharpe 2.29
 //
-// Description:
-//   Bollinger Band squeeze breakout strategy. Waits for BB width to contract (squeeze)
-//   for a sustained period, then enters when price breaks out of the bands with MACD
-//   line above/below signal line as momentum confirmation.
-//
-// Main idea:     Trade the volatility expansion that follows a BB squeeze. Enter on the
-//               breakout candle in the direction confirmed by MACD.
-// Max hold bars: NA — exits managed by ATR-based SL (2.5×) and 1:2.5 R:R TP.
-// Stop loss:     ATR × 2.5 below/above entry.
-// Take profit:   SL distance × 2.5 (1:2.5 R:R).
+// Entry:   BB width contracts for squeeze_bars, then price closes above upper BB
+//          confirmed by MACD line > signal line (momentum behind the move).
+// SL:      Fixed % below entry (default 1.5 %)
+// TP:      Fixed % above entry (default 6.0 %)
+// Sizing:  (equity × risk %) / stop_distance in price
 
-strategy('SWING2: BB Squeeze Breakout - Risk Based', overlay = true, initial_capital = 100000, currency = 'USD')
+strategy('SWING2: BB Squeeze Breakout', overlay=true, initial_capital=100000, currency='USD',
+         default_qty_type=strategy.fixed, default_qty_value=1)
 
-// === INPUTS ===
-risk_per_trade = input.float(1.0, 'Risk % per Trade', minval = 0.1, maxval = 5)
-bb_length = input.int(20, 'BB Length')
-bb_mult = input.float(2.0, 'BB Mult')
-squeeze_length = input.int(5, 'Squeeze Bars')
-macd_fast = input.int(12, 'MACD Fast')
-macd_slow = input.int(26, 'MACD Slow')
-macd_signal = input.int(9, 'MACD Signal')
+// === RISK ===
+risk_per_trade  = input.float(1.0, 'Risk % / Trade', minval=0.1, maxval=5,  group='Risk')
+stop_loss_pct   = input.float(1.5, 'Stop Loss %',    minval=0.1, maxval=20, group='Risk')
+take_profit_pct = input.float(6.0, 'Take Profit %',  minval=0.1, maxval=50, group='Risk')
 
-stop_dist_mult = input.float(2.2, 'Stop loss ATR Mult', minval = 0.1, maxval = 5)
-risk_reward_ratio = input.float(2, 'Take profit target (RRR)', minval = 0.1, maxval = 8)
+// === STRATEGY ===
+direction    = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
+bb_length    = input.int(25,  'BB Length',     minval=5,  group='Strategy')
+bb_mult      = input.float(2.0,'BB Mult',      minval=0.5,group='Strategy')
+squeeze_bars = input.int(5,   'Squeeze Bars',  minval=2,  group='Strategy')
+macd_fast    = input.int(10,  'MACD Fast',     minval=1,  group='Strategy')
+macd_slow    = input.int(24,  'MACD Slow',     minval=1,  group='Strategy')
+macd_sig     = input.int(9,   'MACD Signal',   minval=1,  group='Strategy')
 
-trade_mon = input.bool(true, 'Monday')
-trade_tue = input.bool(true, 'Tuesday')
-trade_wed = input.bool(true, 'Wednesday')
-trade_thu = input.bool(true, 'Thursday')
-trade_fri = input.bool(true, 'Friday')
-trade_sat = input.bool(true, 'Saturday')
-trade_sun = input.bool(true, 'Sunday')
-show_trade_lines = input.bool(true, 'Show Trade Lines')
-trade_line_bars = input.int(45, 'Trade Line Bars', minval = 1, maxval = 100)
+// === DAY FILTER — defaults = MON only (best combo) ===
+trade_mon = input.bool(true,  'Mon', group='Days', inline='d')
+trade_tue = input.bool(false, 'Tue', group='Days', inline='d')
+trade_wed = input.bool(false, 'Wed', group='Days', inline='d')
+trade_thu = input.bool(false, 'Thu', group='Days', inline='d')
+trade_fri = input.bool(false, 'Fri', group='Days', inline='d')
+trade_sat = input.bool(false, 'Sat', group='Days', inline='d')
+trade_sun = input.bool(false, 'Sun', group='Days', inline='d')
+
+// === VISUALS ===
+show_lines = input.bool(true, 'Show Trade Lines', group='Visual')
+line_bars  = input.int(45, 'Line Bars', minval=1, maxval=200, group='Visual')
 
 // === INDICATORS ===
-basis = ta.sma(close, bb_length)
-dev = bb_mult * ta.stdev(close, bb_length)
+basis    = ta.sma(close, bb_length)
+dev      = bb_mult * ta.stdev(close, bb_length)
 upper_bb = basis + dev
 lower_bb = basis - dev
 bb_width = (upper_bb - lower_bb) / basis
 
-[macd_line, signal_line, hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
-atr = ta.atr(14)
+[macd_l, sig_l, _] = ta.macd(close, macd_fast, macd_slow, macd_sig)
 
-// === SQUEEZE DETECTION ===
-squeeze = bb_width < ta.lowest(bb_width, squeeze_length)[1]
-was_squeezed = ta.barssince(squeeze) <= squeeze_length
+// === SQUEEZE ===
+squeezed     = bb_width < ta.lowest(bb_width, squeeze_bars)[1]
+was_squeezed = ta.barssince(squeezed) <= squeeze_bars
 
-// === FILTERS ===
-dow = dayofweek
-allow_day = dow == 1 and trade_mon or dow == 2 and trade_tue or dow == 3 and trade_wed or dow == 4 and trade_thu or dow == 5 and trade_fri or dow == 6 and trade_sat or dow == 7 and trade_sun
+// === DAY FILTER ===
+allow_day = (dayofweek == dayofweek.monday    and trade_mon) or
+            (dayofweek == dayofweek.tuesday   and trade_tue) or
+            (dayofweek == dayofweek.wednesday and trade_wed) or
+            (dayofweek == dayofweek.thursday  and trade_thu) or
+            (dayofweek == dayofweek.friday    and trade_fri) or
+            (dayofweek == dayofweek.saturday  and trade_sat) or
+            (dayofweek == dayofweek.sunday    and trade_sun)
+
+long_ok  = direction == 'Long'  or direction == 'Both'
+short_ok = direction == 'Short' or direction == 'Both'
 
 // === POSITION SIZING ===
-risk_amount = strategy.equity * risk_per_trade / 100
-stop_dist = atr * stop_dist_mult
-qty = risk_amount / stop_dist
+risk_amt  = strategy.equity * risk_per_trade / 100
+stop_dist = close * stop_loss_pct / 100
+qty       = stop_dist > 0 ? risk_amt / stop_dist : 0
 
 // === ENTRIES ===
-long_cond = was_squeezed and close > upper_bb and macd_line > signal_line and allow_day
-short_cond = was_squeezed and close < lower_bb and macd_line < signal_line and allow_day
+long_cond  = was_squeezed and close > upper_bb and macd_l > sig_l and allow_day and long_ok  and strategy.position_size == 0
+short_cond = was_squeezed and close < lower_bb and macd_l < sig_l and allow_day and short_ok and strategy.position_size == 0
 
-// === EXECUTION ===
-if long_cond and strategy.position_size == 0
-    strategy.entry('Long', strategy.long, qty = qty)
-    strategy.exit('Exit', 'Long', stop = close - stop_dist, limit = close + stop_dist * risk_reward_ratio)
+if long_cond and qty > 0
+    sl = close * (1 - stop_loss_pct   / 100)
+    tp = close * (1 + take_profit_pct / 100)
+    strategy.entry('Long',  strategy.long,  qty=qty)
+    strategy.exit ('Exit L','Long',  stop=sl, limit=tp)
 
-if short_cond and strategy.position_size == 0
-    strategy.entry('Short', strategy.short, qty = qty)
-    strategy.exit('Exit', 'Short', stop = close + stop_dist, limit = close - stop_dist * risk_reward_ratio)
+if short_cond and qty > 0
+    sl = close * (1 + stop_loss_pct   / 100)
+    tp = close * (1 - take_profit_pct / 100)
+    strategy.entry('Short', strategy.short, qty=qty)
+    strategy.exit ('Exit S','Short', stop=sl, limit=tp)
 
-// === Trade Lines ===
-if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
-    _entry = strategy.position_avg_price
-    _sl = _entry - stop_dist
-    _tp = _entry + stop_dist * risk_reward_ratio
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+// === TRADE LINES ===
+if show_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    e = strategy.position_avg_price
+    line.new(bar_index, e,                         bar_index+line_bars, e,                         color=color.white, width=2)
+    line.new(bar_index, e*(1-stop_loss_pct/100),   bar_index+line_bars, e*(1-stop_loss_pct/100),   color=color.red,   width=2)
+    line.new(bar_index, e*(1+take_profit_pct/100), bar_index+line_bars, e*(1+take_profit_pct/100), color=color.green, width=2)
 
-if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
-    _entry = strategy.position_avg_price
-    _sl = _entry + stop_dist
-    _tp = _entry - stop_dist * risk_reward_ratio
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.green, width = 2)
+if show_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    e = strategy.position_avg_price
+    line.new(bar_index, e,                         bar_index+line_bars, e,                         color=color.white, width=2)
+    line.new(bar_index, e*(1+stop_loss_pct/100),   bar_index+line_bars, e*(1+stop_loss_pct/100),   color=color.red,   width=2)
+    line.new(bar_index, e*(1-take_profit_pct/100), bar_index+line_bars, e*(1-take_profit_pct/100), color=color.green, width=2)
 
-plot(upper_bb, 'Upper BB', color.red)
-plot(lower_bb, 'Lower BB', color.green)
-plot(basis, 'Basis', color.gray)
+plot(upper_bb, 'Upper BB', color.red,   linewidth=1)
+plot(lower_bb, 'Lower BB', color.green, linewidth=1)
+plot(basis,    'Basis',    color.gray,  linewidth=1)

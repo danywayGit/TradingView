@@ -1,101 +1,105 @@
 //@version=6
-// SWING STRATEGIES (1H-4H, Fewer Trades, Bigger Moves)
-// SWING #3: Supertrend + ADX Power (Strong Trend)
-// TF: 1H-4H | Type: Long/Short | Target: Trail by Supertrend
+// SWING3: Supertrend + ADX Power (Strong Trend)
+// Optimised: DOTUSDT · 15m · Long & Short · Fixed-% SL/TP
+// Best combo: MON+THU+SUN · W-Sharpe 3.94 · S2-Sharpe 2.11
 //
-// Description:
-//   Trend-following swing strategy using Supertrend as both entry signal and trailing
-//   stop. ADX confirms the trend is strong enough to trade; EMA50 acts as a directional
-//   bias filter. Position is closed when Supertrend flips direction.
-//
-// Main idea:     Enter on a Supertrend flip when ADX > threshold and price is on the
-//               correct side of EMA50. Let Supertrend trail the stop.
+// Entry:   Supertrend flips bullish/bearish + ADX > threshold (strong trend)
+//          + price on correct side of EMA filter.
+// SL:      Fixed % from entry (default 1.5 %) — matches backtested fixed_signal type.
+//          Optional Supertrend Trailing exit available via exit_mode input.
+// TP:      Fixed % from entry (default 3.0 %).
+// Sizing:  (equity × risk %) / stop_distance in price
 
-// Max hold bars: NA — exit triggered by Supertrend direction change.
-// Stop loss:     ATR × 2.5 at entry (for position sizing); Supertrend level is the trailing stop.
-// Take profit:   NA — trail and hold until Supertrend reversal.
-////
-// OPTIMIZED PARAMETERS (ETHUSDT 1H, 2021-2024, walk-forward validated):
-//   adx_threshold = 30  (was 25 — stricter filter, wins jump from 34% → 51%)
-//   ema_filter    = 100 (was 50  — EMA100 is the sweet spot between 50 and 200)
-//   atr_stop_mult = 2.5 (unchanged)
-//   st_period     = 10  (unchanged — matches TradingView default)
-//   st_factor     = 3.0 (unchanged — dominant across all top-10 combos)
+strategy('SWING3: Supertrend + ADX', overlay=true, initial_capital=100000, currency='USD',
+         default_qty_type=strategy.fixed, default_qty_value=1)
 
-strategy('SWING3: Supertrend + ADX - Risk Based', overlay = true, initial_capital = 100000, currency = 'USD')
+// === RISK ===
+risk_per_trade  = input.float(1.0, 'Risk % / Trade', minval=0.1, maxval=5,  group='Risk')
+stop_loss_pct   = input.float(1.5, 'Stop Loss %',    minval=0.1, maxval=20, group='Risk')
+take_profit_pct = input.float(3.0, 'Take Profit %',  minval=0.1, maxval=50, group='Risk')
+exit_mode       = input.string('Fixed R:R', 'Exit Mode', options=['Fixed R:R','ST Trailing'], group='Risk')
 
-// === INPUTS ===
-risk_per_trade = input.float(1.0, 'Risk % per Trade', minval = 0.1, maxval = 5)
-st_period = input.int(10, 'Supertrend Period')
-st_factor = input.float(3.0, 'Supertrend Factor')
-adx_period = input.int(14, 'ADX Period')
-adx_threshold = input.int(30, 'ADX Threshold') // optimized: was 25
-ema_filter = input.int(100, 'EMA Filter') // optimized: was 50
+// === STRATEGY ===
+direction     = input.string('Both', 'Direction', options=['Long','Short','Both'], group='Strategy')
+st_period     = input.int(14,   'ST Period',       minval=1,   group='Strategy')
+st_factor     = input.float(3.0,'ST Factor',       minval=0.1, group='Strategy')
+adx_period    = input.int(14,   'ADX Period',      minval=1,   group='Strategy')
+adx_threshold = input.int(25,   'ADX Threshold',   minval=10,  group='Strategy')
+ema_filter    = input.int(200,  'EMA Filter',      minval=10,  group='Strategy')
 
-trade_mon = input.bool(true, 'Monday')
-trade_tue = input.bool(true, 'Tuesday')
-trade_wed = input.bool(true, 'Wednesday')
-trade_thu = input.bool(true, 'Thursday')
-trade_fri = input.bool(true, 'Friday')
-trade_sat = input.bool(true, 'Saturday')
-trade_sun = input.bool(true, 'Sunday')
-show_trade_lines = input.bool(true, 'Show Trade Lines')
-trade_line_bars = input.int(45, 'Trade Line Bars', minval = 1, maxval = 100)
+// === DAY FILTER — defaults = MON+THU+SUN (best combo) ===
+trade_mon = input.bool(true,  'Mon', group='Days', inline='d')
+trade_tue = input.bool(false, 'Tue', group='Days', inline='d')
+trade_wed = input.bool(false, 'Wed', group='Days', inline='d')
+trade_thu = input.bool(true,  'Thu', group='Days', inline='d')
+trade_fri = input.bool(false, 'Fri', group='Days', inline='d')
+trade_sat = input.bool(false, 'Sat', group='Days', inline='d')
+trade_sun = input.bool(true,  'Sun', group='Days', inline='d')
+
+// === VISUALS ===
+show_lines = input.bool(true, 'Show Trade Lines', group='Visual')
+line_bars  = input.int(45, 'Line Bars', minval=1, maxval=200, group='Visual')
 
 // === INDICATORS ===
 [st_dir, st_level] = ta.supertrend(st_factor, st_period)
-[_, _, adx] = ta.dmi(adx_period, adx_period)
-ema_filt = ta.ema(close, ema_filter)
-atr = ta.atr(14)
+[_, _, adx]        = ta.dmi(adx_period, adx_period)
+ema_filt           = ta.ema(close, ema_filter)
 
-// === FILTERS ===
-dow = dayofweek
-allow_day = dow == 1 and trade_mon or dow == 2 and trade_tue or dow == 3 and trade_wed or dow == 4 and trade_thu or dow == 5 and trade_fri or dow == 6 and trade_sat or dow == 7 and trade_sun
+// === DAY FILTER ===
+allow_day = (dayofweek == dayofweek.monday    and trade_mon) or
+            (dayofweek == dayofweek.tuesday   and trade_tue) or
+            (dayofweek == dayofweek.wednesday and trade_wed) or
+            (dayofweek == dayofweek.thursday  and trade_thu) or
+            (dayofweek == dayofweek.friday    and trade_fri) or
+            (dayofweek == dayofweek.saturday  and trade_sat) or
+            (dayofweek == dayofweek.sunday    and trade_sun)
 
-// === POSITION SIZING ===
-risk_amount = strategy.equity * risk_per_trade / 100
-stop_dist = atr * 2.5
-qty = risk_amount / stop_dist
+long_ok  = direction == 'Long'  or direction == 'Both'
+short_ok = direction == 'Short' or direction == 'Both'
 
-// === ENTRIES ===
+// === SIGNALS ===
 st_bull = st_dir < 0
 st_bear = st_dir > 0
-adx_strong = adx > adx_threshold
 
-long_cond = st_bull and adx_strong and close > ema_filt and allow_day
-short_cond = st_bear and adx_strong and close < ema_filt and allow_day
+long_cond  = st_bull and not st_bull[1] and adx > adx_threshold and close > ema_filt and allow_day and long_ok  and strategy.position_size == 0
+short_cond = st_bear and not st_bear[1] and adx > adx_threshold and close < ema_filt and allow_day and short_ok and strategy.position_size == 0
 
-// === EXECUTION ===
-if long_cond and strategy.position_size == 0
-    strategy.entry('Long', strategy.long, qty = qty)
+// === POSITION SIZING ===
+risk_amt  = strategy.equity * risk_per_trade / 100
+stop_dist = close * stop_loss_pct / 100
+qty       = stop_dist > 0 ? risk_amt / stop_dist : 0
 
-if short_cond and strategy.position_size == 0
-    strategy.entry('Short', strategy.short, qty = qty)
+// === ENTRIES & EXITS ===
+if long_cond and qty > 0
+    strategy.entry('Long', strategy.long, qty=qty)
+    if exit_mode == 'Fixed R:R'
+        strategy.exit('Exit L', 'Long', stop=close*(1-stop_loss_pct/100), limit=close*(1+take_profit_pct/100))
 
-// Trailing exit via Supertrend flip
-if st_bear
-    strategy.close('Long')
-if st_bull
-    strategy.close('Short')
+if short_cond and qty > 0
+    strategy.entry('Short', strategy.short, qty=qty)
+    if exit_mode == 'Fixed R:R'
+        strategy.exit('Exit S', 'Short', stop=close*(1+stop_loss_pct/100), limit=close*(1-take_profit_pct/100))
 
-// === Trade Lines ===
-if show_trade_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
-    _entry = strategy.position_avg_price
-    _sl = _entry - stop_dist
-    _tp = _entry + stop_dist * 2 // indicative only — real exit is Supertrend trailing
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.gray, width = 1, style = line.style_dashed)
-    label.new(bar_index + trade_line_bars, _tp, 'Indicative TP\n(exit = ST flip)', color = color.gray, style = label.style_label_left, size = size.tiny)
+// Supertrend trailing exit (optional)
+if exit_mode == 'ST Trailing'
+    if st_bear and strategy.position_size > 0
+        strategy.close('Long')
+    if st_bull and strategy.position_size < 0
+        strategy.close('Short')
 
-if show_trade_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
-    _entry = strategy.position_avg_price
-    _sl = _entry + stop_dist
-    _tp = _entry - stop_dist * 2
-    line.new(bar_index, _entry, bar_index + trade_line_bars, _entry, color = color.white, width = 2)
-    line.new(bar_index, _sl, bar_index + trade_line_bars, _sl, color = color.red, width = 2)
-    line.new(bar_index, _tp, bar_index + trade_line_bars, _tp, color = color.gray, width = 1, style = line.style_dashed)
-    label.new(bar_index + trade_line_bars, _tp, 'Indicative TP\n(exit = ST flip)', color = color.gray, style = label.style_label_left, size = size.tiny)
+// === TRADE LINES ===
+if show_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
+    e = strategy.position_avg_price
+    line.new(bar_index, e,                         bar_index+line_bars, e,                         color=color.white, width=2)
+    line.new(bar_index, e*(1-stop_loss_pct/100),   bar_index+line_bars, e*(1-stop_loss_pct/100),   color=color.red,   width=2)
+    _tp = exit_mode == 'Fixed R:R' ? e*(1+take_profit_pct/100) : e*(1+take_profit_pct/100)
+    line.new(bar_index, _tp, bar_index+line_bars, _tp, color=exit_mode=='Fixed R:R' ? color.green : color.gray, width=exit_mode=='Fixed R:R' ? 2 : 1, style=exit_mode=='ST Trailing' ? line.style_dashed : line.style_solid)
 
-plot(st_level, 'Supertrend', color = st_bull ? color.green : color.red)
-plot(ema_filt, 'EMA Filter', color.blue)
+if show_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
+    e = strategy.position_avg_price
+    line.new(bar_index, e,                         bar_index+line_bars, e,                         color=color.white, width=2)
+    line.new(bar_index, e*(1+stop_loss_pct/100),   bar_index+line_bars, e*(1+stop_loss_pct/100),   color=color.red,   width=2)
+    line.new(bar_index, e*(1-take_profit_pct/100), bar_index+line_bars, e*(1-take_profit_pct/100), color=color.green, width=2)
+
+plot(st_level, 'Supertrend', color=st_bull ? color.green : color.red, linewidth=2)
+plot(ema_filt, 'EMA Filter', color.blue, linewidth=1)
