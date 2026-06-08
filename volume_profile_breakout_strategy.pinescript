@@ -1,28 +1,39 @@
 //@version=6
 // VP1: Volume Profile Breakout (VAH / VAL + Volume Spike)
-// Optimised: TRXUSDT · 15m · Long Only · Fixed-% SL/TP
+// Optimised: TRXUSDT · 15m · Long Only · Fixed-% or ATR SL
 // Best combo: MON+TUE+WED+FRI+SAT · W-Sharpe 4.55 · S2-Sharpe 4.21
 //
 // Concept: Approximate a volume profile over a rolling lookback window.
 //   POC  = volume-weighted average price (VWAP proxy for most-traded level).
-//   VAH / VAL = VWAP ± (value_area_pct × std-dev of closes), containing the
-//              value area of volume. A close above VAH with a volume spike is
-//              a validated breakout.
+//   VAH / VAL = POC ± (k × std-dev of closes), containing the value area.
+//   A close above VAH with a volume spike is a validated breakout.
 //
-// Entry:   Close > VAH + volume > avg_vol × spike_mult + ADX > adx_threshold
-//          + close > POC (price above volume center = bullish structure).
+// Entry:   Close > VAH + volume > avg_vol × spike_mult + ADX > threshold
+//          + close > POC + optional EMA trend filter.
 //          Inverse for shorts.
-// SL:      Fixed % from entry (default 1.5 %)
-// TP:      Fixed % from entry (default 3.0 %)
+// SL:      Fixed % from entry  OR  ATR × multiplier  (toggle in Stop Loss group)
+// TP:      SL distance × R:R ratio
 // Sizing:  (equity × risk %) / stop_distance in price
+//
+// Note:    For best results use a ticker with real volume (e.g. BINANCE:TRXUSDT.P).
+//          CRYPTO_* synthetic feeds have no volume — spike filter auto-bypasses.
 
 strategy('VP1: Volume Profile Breakout', overlay=true, initial_capital=100000, currency='USD',
-         default_qty_type=strategy.fixed, default_qty_value=1)
+  default_qty_type=strategy.fixed, default_qty_value=1)
 
 // === RISK ===
-risk_per_trade  = input.float(1.0, 'Risk % / Trade', minval=0.1, maxval=5,  group='Risk')
-stop_loss_pct   = input.float(1.5, 'Stop Loss %',    minval=0.1, maxval=20, group='Risk')
-take_profit_pct = input.float(3.0, 'Take Profit %',  minval=0.1, maxval=50, group='Risk')
+risk_per_trade = input.float(0.75, 'Risk % / Trade', minval=0.1, maxval=5, group='Risk')
+
+// === STOP LOSS ===
+use_atr_stop    = input.bool(false, 'ATR Stop  (unchecked = Fixed %)', group='Stop Loss')
+stop_loss_pct   = input.float(1.5,  'Fixed Stop Loss %',  minval=0.1, maxval=20, group='Stop Loss')
+atr_sl_period   = input.int(14,     'ATR Period',         minval=1,   group='Stop Loss')
+atr_sl_mult     = input.float(1.5,  'ATR Multiplier',     minval=0.1, group='Stop Loss')
+take_profit_rr  = input.float(2.0,  'Take Profit R:R',   minval=0.1, group='Stop Loss')
+
+// === TREND FILTER ===
+use_ema_filter = input.bool(true, 'Use EMA Trend Filter', group='Trend Filter')
+ema_filter_len = input.int(200,   'EMA Length (try 55, 100, 200)', minval=10, group='Trend Filter')
 
 // === STRATEGY ===
 direction        = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
@@ -34,7 +45,7 @@ adx_threshold    = input.int(25,   'ADX Min',          minval=10,  group='Strate
 cooldown_bars    = input.int(10,   'Cooldown Bars',    minval=1,   group='Strategy')
 min_va_pct       = input.float(0.5,'Min VA Width %',   minval=0.1, group='Strategy')
 
-// === DAY FILTER — defaults = MON+TUE+WED+FRI+SAT (best combo, no THU+SUN) ===
+// === DAY FILTER — defaults = MON+TUE+WED+FRI+SAT (best combo) ===
 trade_mon = input.bool(true,  'Mon', group='Days', inline='d')
 trade_tue = input.bool(true,  'Tue', group='Days', inline='d')
 trade_wed = input.bool(true,  'Wed', group='Days', inline='d')
@@ -44,24 +55,39 @@ trade_sat = input.bool(true,  'Sat', group='Days', inline='d')
 trade_sun = input.bool(false, 'Sun', group='Days', inline='d')
 
 // === VISUALS ===
-show_lines = input.bool(true, 'Show Trade Lines',    group='Visual')
-show_bands = input.bool(true, 'Show VA Bands',       group='Visual')
-line_bars  = input.int(45, 'Line Bars', minval=1, maxval=200, group='Visual')
+show_lines      = input.bool(true, 'Show Trade Lines', group='Visual')
+show_bands      = input.bool(true, 'Show VA Bands',    group='Visual')
+show_ema_filter = input.bool(true, 'Show EMA Filter',  group='Visual')
+line_bars       = input.int(45, 'Line Bars', minval=1, maxval=200, group='Visual')
+
+// === VOLUME AVAILABILITY ===
+// CRYPTO_* feeds have no volume — filters skip automatically.
+has_vol = not na(volume) and volume > 0
 
 // === VOLUME PROFILE APPROXIMATION ===
-// POC ≈ VWAP over lookback (most-traded price level proxy)
-// VAH/VAL ≈ POC ± k × std_dev where k is derived from value_area_pct
-// k=1.0 ≈ 68%, k=1.28 ≈ 80%, k=1.65 ≈ 90%
-va_k     = value_area_pct == 80 ? 1.28 : value_area_pct == 70 ? 1.04 : value_area_pct == 90 ? 1.65 : 1.04
-poc      = ta.vwap  // rolling session VWAP as POC proxy
+// POC  = VWMA when volume available, SMA otherwise (ta.vwap resets per session)
+// VAH/VAL = POC ± k × stdev(close, lookback)
+// k: 1.04 ≈ 70%, 1.28 ≈ 80%, 1.65 ≈ 90%
+va_k    = value_area_pct == 80 ? 1.28 : value_area_pct == 70 ? 1.04 : value_area_pct == 90 ? 1.65 : 1.04
+vol_sum = math.sum(has_vol ? volume : 0.0, profile_lookback)
+poc     = vol_sum > 0
+  ? math.sum(close * volume, profile_lookback) / vol_sum
+  : ta.sma(close, profile_lookback)
 cl_std   = ta.stdev(close, profile_lookback)
 vah      = poc + va_k * cl_std
 val      = poc - va_k * cl_std
-va_width = (vah - val) / close * 100  // as % of price
+va_width = (vah - val) / close * 100
 
 // === OTHER INDICATORS ===
-vol_avg     = ta.sma(volume, vol_avg_period)
+vol_avg     = ta.sma(has_vol ? volume : na, vol_avg_period)
 [_, _, adx] = ta.dmi(14, 14)
+atr_val     = ta.atr(atr_sl_period)
+ema_trend   = ta.ema(close, ema_filter_len)
+
+// === STOP DISTANCE (computed once per bar, used for sizing + exits) ===
+stop_dist = use_atr_stop
+  ? atr_val * atr_sl_mult
+  : close * stop_loss_pct / 100
 
 // === COOLDOWN ===
 var int bars_since_exit = cooldown_bars + 1
@@ -79,52 +105,61 @@ allow_day = (dayofweek == dayofweek.monday    and trade_mon) or
   (dayofweek == dayofweek.saturday  and trade_sat) or
   (dayofweek == dayofweek.sunday    and trade_sun)
 
-long_ok  = direction == 'Long'  or direction == 'Both'
-short_ok = direction == 'Short' or direction == 'Both'
+// === TREND FILTER ===
+trend_long  = not use_ema_filter or close > ema_trend
+trend_short = not use_ema_filter or close < ema_trend
+
+long_ok  = (direction == 'Long'  or direction == 'Both') and trend_long
+short_ok = (direction == 'Short' or direction == 'Both') and trend_short
 
 // === FILTERS ===
-vol_spike_ok = volume >= vol_avg * vol_spike_mult
+// Skip volume spike filter when feed has no volume data
+vol_spike_ok = not has_vol or (volume >= nz(vol_avg, 1) * vol_spike_mult)
 adx_ok       = adx >= adx_threshold
 va_wide_ok   = va_width >= min_va_pct
 
 // === POSITION SIZING ===
-risk_amt  = strategy.equity * risk_per_trade / 100
-stop_dist = close * stop_loss_pct / 100
-qty       = stop_dist > 0 ? risk_amt / stop_dist : 0
+risk_amt = strategy.equity * risk_per_trade / 100
+qty      = stop_dist > 0 ? risk_amt / stop_dist : 0
 
 // === ENTRIES ===
-long_cond  = close > vah and close > poc and vol_spike_ok and adx_ok and va_wide_ok and cooled_down and allow_day and long_ok  and strategy.position_size == 0
-short_cond = close < val and close < poc and vol_spike_ok and adx_ok and va_wide_ok and cooled_down and allow_day and short_ok and strategy.position_size == 0
+long_cond  = close > vah and close > poc and vol_spike_ok and adx_ok and va_wide_ok and
+  cooled_down and allow_day and long_ok  and strategy.position_size == 0
+short_cond = close < val and close < poc and vol_spike_ok and adx_ok and va_wide_ok and
+  cooled_down and allow_day and short_ok and strategy.position_size == 0
 
 if long_cond and qty > 0
-    sl = close * (1 - stop_loss_pct   / 100)
-    tp = close * (1 + take_profit_pct / 100)
+    sl = close - stop_dist
+    tp = close + stop_dist * take_profit_rr
     strategy.entry('Long',  strategy.long,  qty=qty)
     strategy.exit ('Exit L','Long',  stop=sl, limit=tp)
 
 if short_cond and qty > 0
-    sl = close * (1 + stop_loss_pct   / 100)
-    tp = close * (1 - take_profit_pct / 100)
+    sl = close + stop_dist
+    tp = close - stop_dist * take_profit_rr
     strategy.entry('Short', strategy.short, qty=qty)
     strategy.exit ('Exit S','Short', stop=sl, limit=tp)
 
 // === TRADE LINES ===
 if show_lines and strategy.position_size > 0 and strategy.position_size[1] <= 0
-    e = strategy.position_avg_price
-    line.new(bar_index, e,                         bar_index+line_bars, e,                         color=color.white, width=2)
-    line.new(bar_index, e*(1-stop_loss_pct/100),   bar_index+line_bars, e*(1-stop_loss_pct/100),   color=color.red,   width=2)
-    line.new(bar_index, e*(1+take_profit_pct/100), bar_index+line_bars, e*(1+take_profit_pct/100), color=color.green, width=2)
+    e  = strategy.position_avg_price
+    sd = stop_dist
+    line.new(bar_index, e,            bar_index+line_bars, e,            color=color.white, width=2)
+    line.new(bar_index, e-sd,         bar_index+line_bars, e-sd,         color=color.red,   width=2)
+    line.new(bar_index, e+sd*take_profit_rr, bar_index+line_bars, e+sd*take_profit_rr, color=color.green, width=2)
 
 if show_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
-    e = strategy.position_avg_price
-    line.new(bar_index, e,                         bar_index+line_bars, e,                         color=color.white, width=2)
-    line.new(bar_index, e*(1+stop_loss_pct/100),   bar_index+line_bars, e*(1+stop_loss_pct/100),   color=color.red,   width=2)
-    line.new(bar_index, e*(1-take_profit_pct/100), bar_index+line_bars, e*(1-take_profit_pct/100), color=color.green, width=2)
+    e  = strategy.position_avg_price
+    sd = stop_dist
+    line.new(bar_index, e,            bar_index+line_bars, e,            color=color.white, width=2)
+    line.new(bar_index, e+sd,         bar_index+line_bars, e+sd,         color=color.red,   width=2)
+    line.new(bar_index, e-sd*take_profit_rr, bar_index+line_bars, e-sd*take_profit_rr, color=color.green, width=2)
 
-// === BAND PLOTS ===
-plot(show_bands ? vah : na, 'VAH', color.new(color.blue,  40), linewidth=1)
-plot(show_bands ? val : na, 'VAL', color.new(color.blue,  40), linewidth=1)
-plot(show_bands ? poc : na, 'POC', color.new(color.yellow,20), linewidth=2)
+// === PLOTS ===
+plot(show_bands      ? vah       : na, 'VAH', color.new(color.blue,   40), linewidth=1)
+plot(show_bands      ? val       : na, 'VAL', color.new(color.blue,   40), linewidth=1)
+plot(show_bands      ? poc       : na, 'POC', color.new(color.yellow, 20), linewidth=2)
+plot(show_ema_filter ? ema_trend : na, 'EMA Filter', color.new(color.orange, 0), linewidth=2)
 
 plotshape(long_cond,  'Long',  shape.triangleup,   location.belowbar, color.green, size=size.small)
 plotshape(short_cond, 'Short', shape.triangledown, location.abovebar, color.red,   size=size.small)
