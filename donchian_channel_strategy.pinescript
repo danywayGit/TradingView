@@ -22,7 +22,7 @@ atr_stop_mult  = input.float(3.0, 'ATR Stop Mult',  minval=0.5, maxval=10, group
 rr_ratio       = input.float(3.0, 'R:R Ratio',      minval=0.5, maxval=10, group='Risk')
 
 // === STRATEGY ===
-direction        = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
+direction        = input.string('Both', 'Direction', options=['Long','Short','Both'], group='Strategy')
 donchian_length  = input.int(15,  'Donchian Length',      minval=5,   group='Strategy')
 ema_trend_length = input.int(50,  'EMA Trend Filter',     minval=10,  group='Strategy')
 adx_threshold    = input.int(20,  'ADX Entry Min',        minval=10,  group='Strategy')
