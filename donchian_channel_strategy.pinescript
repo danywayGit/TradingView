@@ -1,6 +1,6 @@
 //@version=6
 // DC1: Donchian Channel Breakout (Mini-Turtle)
-// Optimised: SUIUSDT · 1H · Long only · EMA trend filter + ATR SL + fixed R:R TP
+// Optimised: SUIUSDT · 1H · Both directions · EMA200 trend filter + ATR SL + fixed R:R TP
 // Best combo: TUE+THU+FRI+SAT+SUN · W-Sharpe 4.18 · S2-Sharpe 3.70
 //
 // Entry:   Price closes above Donchian upper band (n-bar highest high)
@@ -24,7 +24,7 @@ rr_ratio       = input.float(3.0, 'R:R Ratio',      minval=0.5, maxval=10, group
 // === STRATEGY ===
 direction        = input.string('Both', 'Direction', options=['Long','Short','Both'], group='Strategy')
 donchian_length  = input.int(15,  'Donchian Length',      minval=5,   group='Strategy')
-ema_trend_length = input.int(50,  'EMA Trend Filter',     minval=10,  group='Strategy')
+ema_trend_length = input.int(200,  'EMA Trend Filter',     minval=10,  group='Strategy')
 adx_threshold    = input.int(20,  'ADX Entry Min',        minval=10,  group='Strategy')
 adx_exit         = input.int(15,  'ADX Exit (fade)',      minval=5,   group='Strategy')
 atr_period       = input.int(10,  'ATR Period',           minval=5,   group='Strategy')
