@@ -53,12 +53,12 @@ bear_div = high > ta.highest(high, div_lookback)[1] and hist < ta.highest(hist, 
 
 // === DAY FILTER ===
 allow_day = (dayofweek == dayofweek.monday    and trade_mon) or
-            (dayofweek == dayofweek.tuesday   and trade_tue) or
-            (dayofweek == dayofweek.wednesday and trade_wed) or
-            (dayofweek == dayofweek.thursday  and trade_thu) or
-            (dayofweek == dayofweek.friday    and trade_fri) or
-            (dayofweek == dayofweek.saturday  and trade_sat) or
-            (dayofweek == dayofweek.sunday    and trade_sun)
+  (dayofweek == dayofweek.tuesday   and trade_tue) or
+  (dayofweek == dayofweek.wednesday and trade_wed) or
+  (dayofweek == dayofweek.thursday  and trade_thu) or
+  (dayofweek == dayofweek.friday    and trade_fri) or
+  (dayofweek == dayofweek.saturday  and trade_sat) or
+  (dayofweek == dayofweek.sunday    and trade_sun)
 
 long_ok  = (direction == 'Long'  or direction == 'Both')
 short_ok = (direction == 'Short' or direction == 'Both')

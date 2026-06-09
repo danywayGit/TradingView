@@ -1,14 +1,17 @@
 //@version=6
 // DC1: Donchian Channel Breakout (Mini-Turtle)
-// Optimised: SUIUSDT · 1H · Long only · ATR SL + fixed R:R TP
+// Optimised: SUIUSDT · 1H · Long only · EMA trend filter + ATR SL + fixed R:R TP
 // Best combo: TUE+THU+FRI+SAT+SUN · W-Sharpe 4.18 · S2-Sharpe 3.70
 //
 // Entry:   Price closes above Donchian upper band (n-bar highest high)
-//          + ADX confirms trend strength + volume above average.
-// SL:      ATR(atr_period) × atr_stop_mult below/above entry (default 3.0×)
-// TP:      SL distance × rr_ratio (default 3.0 × = 1:3 R:R)
+//          + ADX >= adx_threshold (trend strength)
+//          + Volume >= vol_avg × vol_mult (breakout conviction, default 1.2×)
+//          + Channel width >= min_ch_pct% (avoid tight/ranging markets)
+// Trend:   Only long when close > EMA(ema_trend_length); only short when below
+// SL:      ATR(atr_period) × atr_stop_mult below/above entry (fixed at entry)
+// TP:      SL distance × rr_ratio (limit order, set at entry)
 // Exit:    Also closes if ADX fades below adx_exit (trend dying)
-// Sizing:  (equity × risk %) / ATR-based stop distance
+// Sizing:  (equity × risk%) / ATR-based stop distance at entry
 
 strategy('DC1: Donchian Channel Breakout', overlay=true, initial_capital=100000, currency='USD',
          default_qty_type=strategy.fixed, default_qty_value=1)
@@ -19,14 +22,15 @@ atr_stop_mult  = input.float(3.0, 'ATR Stop Mult',  minval=0.5, maxval=10, group
 rr_ratio       = input.float(3.0, 'R:R Ratio',      minval=0.5, maxval=10, group='Risk')
 
 // === STRATEGY ===
-direction       = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
-donchian_length = input.int(15,  'Donchian Length',   minval=5,   group='Strategy')
-adx_threshold   = input.int(20,  'ADX Entry Min',     minval=10,  group='Strategy')
-adx_exit        = input.int(15,  'ADX Exit (fade)',   minval=5,   group='Strategy')
-atr_period      = input.int(10,  'ATR Period',        minval=5,   group='Strategy')
-vol_avg_period  = input.int(30,  'Volume MA Period',  minval=5,   group='Strategy')
-vol_mult        = input.float(0.8,'Volume Min Mult',  minval=0.1, group='Strategy')
-min_ch_pct      = input.float(1.0,'Min Channel Width %', minval=0.1, group='Strategy')
+direction        = input.string('Long', 'Direction', options=['Long','Short','Both'], group='Strategy')
+donchian_length  = input.int(15,  'Donchian Length',      minval=5,   group='Strategy')
+ema_trend_length = input.int(50,  'EMA Trend Filter',     minval=10,  group='Strategy')
+adx_threshold    = input.int(20,  'ADX Entry Min',        minval=10,  group='Strategy')
+adx_exit         = input.int(15,  'ADX Exit (fade)',      minval=5,   group='Strategy')
+atr_period       = input.int(10,  'ATR Period',           minval=5,   group='Strategy')
+vol_avg_period   = input.int(30,  'Volume MA Period',     minval=5,   group='Strategy')
+vol_mult         = input.float(1.2,'Volume Min Mult',     minval=0.1, group='Strategy')
+min_ch_pct       = input.float(1.0,'Min Channel Width %', minval=0.1, group='Strategy')
 
 // === DAY FILTER — defaults = TUE+THU+FRI+SAT+SUN (best combo) ===
 trade_mon = input.bool(false, 'Mon', group='Days', inline='d')
@@ -50,15 +54,16 @@ ch_width    = (upper_band - lower_band) / close * 100
 [_, _, adx]  = ta.dmi(14, 14)
 atr_val      = ta.atr(atr_period)
 vol_avg      = ta.sma(volume, vol_avg_period)
+ema_trend    = ta.ema(close, ema_trend_length)
 
 // === DAY FILTER ===
 allow_day = (dayofweek == dayofweek.monday    and trade_mon) or
-            (dayofweek == dayofweek.tuesday   and trade_tue) or
-            (dayofweek == dayofweek.wednesday and trade_wed) or
-            (dayofweek == dayofweek.thursday  and trade_thu) or
-            (dayofweek == dayofweek.friday    and trade_fri) or
-            (dayofweek == dayofweek.saturday  and trade_sat) or
-            (dayofweek == dayofweek.sunday    and trade_sun)
+  (dayofweek == dayofweek.tuesday   and trade_tue) or
+  (dayofweek == dayofweek.wednesday and trade_wed) or
+  (dayofweek == dayofweek.thursday  and trade_thu) or
+  (dayofweek == dayofweek.friday    and trade_fri) or
+  (dayofweek == dayofweek.saturday  and trade_sat) or
+  (dayofweek == dayofweek.sunday    and trade_sun)
 
 long_ok  = direction == 'Long'  or direction == 'Both'
 short_ok = direction == 'Short' or direction == 'Both'
@@ -67,6 +72,8 @@ short_ok = direction == 'Short' or direction == 'Both'
 vol_ok     = volume >= vol_avg * vol_mult
 adx_ok     = adx >= adx_threshold
 channel_ok = ch_width >= min_ch_pct
+trend_long = close > ema_trend    // only long above EMA
+trend_short = close < ema_trend   // only short below EMA
 
 // === POSITION SIZING ===
 risk_amt  = strategy.equity * risk_per_trade / 100
@@ -74,8 +81,8 @@ stop_dist = atr_val * atr_stop_mult
 qty       = stop_dist > 0 ? risk_amt / stop_dist : 0
 
 // === ENTRIES ===
-long_cond  = close > upper_band and adx_ok and vol_ok and channel_ok and allow_day and long_ok  and strategy.position_size == 0
-short_cond = close < lower_band and adx_ok and vol_ok and channel_ok and allow_day and short_ok and strategy.position_size == 0
+long_cond  = close > upper_band and adx_ok and vol_ok and channel_ok and trend_long  and allow_day and long_ok  and strategy.position_size == 0
+short_cond = close < lower_band and adx_ok and vol_ok and channel_ok and trend_short and allow_day and short_ok and strategy.position_size == 0
 
 if long_cond and qty > 0
     sl = close - stop_dist
@@ -89,7 +96,7 @@ if short_cond and qty > 0
     strategy.entry('Short', strategy.short, qty=qty)
     strategy.exit ('Exit S','Short', stop=sl, limit=tp)
 
-// ADX fade exit — trend died
+// === ADX FADE EXIT — trend died ===
 if strategy.position_size > 0 and adx < adx_exit
     strategy.close('Long',  comment='ADX fade')
 if strategy.position_size < 0 and adx < adx_exit
@@ -110,6 +117,7 @@ if show_lines and strategy.position_size < 0 and strategy.position_size[1] >= 0
     line.new(bar_index, e+sd,         bar_index+line_bars, e+sd,         color=color.red,   width=2)
     line.new(bar_index, e-sd*rr_ratio,bar_index+line_bars, e-sd*rr_ratio,color=color.green, width=2)
 
-plot(upper_band, 'Donchian High', color.red,   linewidth=1)
-plot(lower_band, 'Donchian Low',  color.green, linewidth=1)
-plot(mid_band,   'Donchian Mid',  color.gray,  linewidth=1)
+plot(upper_band, 'Donchian High', color.red,    linewidth=1)
+plot(lower_band, 'Donchian Low',  color.green,  linewidth=1)
+plot(mid_band,   'Donchian Mid',  color.gray,   linewidth=1)
+plot(ema_trend,  'EMA Trend',     color.yellow, linewidth=2)
