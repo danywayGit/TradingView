@@ -12,7 +12,10 @@
 // Max hold bars: NA — indicator only.
 // Stop loss:     NA — managed externally per user.
 // Take profit:   NA — managed externally per user.
-indicator(title = 'DCA Buy v10 - Enhanced with Score', shorttitle = 'DCABuy_v10Test', overlay = true, max_labels_count=500)
+// ATH gating:    Sticky all-time-high of HIGH (only ever raised). Sells need close above
+//                the latched prior ATH by +15% once the ATH has been stable for 90 days;
+//                buys are blocked until the ATH has been unchanged for 120 days.
+indicator(title = 'DCA Buy v10 - Enhanced with Score', shorttitle = 'DCABuy_v10Execution', overlay = true, max_labels_count=500)
 
 // === Input Parameters ===
 lenema200 = input.int(title = 'EMA 200 Length', defval = 200, minval = 1)
@@ -23,6 +26,11 @@ scoreThresholdBuy = input.int(title = 'Score Threshold for Buy Signal', defval =
 scoreThresholdSell = input.int(title = 'Score Threshold for Sell Signal', defval = 5, minval = 1, maxval = 9)
 AlertType    = input.string(title = 'Alert Type', options = ['alerts', 'trading_bot', 'debug'], defval = 'trading_bot')
 TradingUserName    = input.string(title = 'Trading User Name', options = ['ALL', 'Danyway', 'Enzo', 'Luca'], defval = 'ALL')
+
+sellAthBreakoutPct = input.float(title = 'Sell ATH Breakout %', defval = 15.0, minval = 0, step = 1, group = 'All-Time High')
+sellAthStableDays  = input.int(title = 'Sell ATH Stable (days)', defval = 90, minval = 1, group = 'All-Time High')
+buyAthNoChangeDays = input.int(title = 'Buy ATH Unchanged (days)', defval = 120, minval = 1, group = 'All-Time High')
+showAthLevels      = input.bool(title = 'Plot ATH / Sell Reference', defval = true, group = 'All-Time High')
 
 leftbar = input.int(title = 'Leftbar', defval = 12, minval = 1, group = 'Pivots')
 rightbar = input.int(title = 'Rightbar', defval = 2, minval = 0, group = 'Pivots')
@@ -42,6 +50,30 @@ myrsi = ta.rsi(close, rsiLength)
 // Volume analysis
 avgVolume = ta.sma(volume, volumeLookback)
 volumeSpike = volume > avgVolume * 1.5
+
+// === All-Time-High Tracking ===
+// ATH is a sticky record of the highest high ever seen (only ever raised).
+// sellRef latches the prior ATH value once the ATH has been unchanged long enough,
+// so a breakout rally can extend beyond it before the record is raised again.
+periodSecs = timeframe.in_seconds(timeframe.period)
+barsStable = math.max(1, math.round(sellAthStableDays * 86400 / periodSecs))
+barsNoChange = math.max(1, math.round(buyAthNoChangeDays * 86400 / periodSecs))
+
+var float ath = na
+var int athChangedBar = na
+if na(ath) or high > ath
+    ath := high
+    athChangedBar := bar_index
+
+athUnchangedBars = bar_index - athChangedBar
+athStable = athUnchangedBars >= barsStable
+athNoChange = athUnchangedBars >= barsNoChange
+
+var float sellRef = na
+if athStable
+    sellRef := na(sellRef) ? ath : math.max(sellRef, ath)
+
+sellAthBreakout = not na(sellRef) and close >= sellRef * (1 + sellAthBreakoutPct / 100)
 
 // === Scoring System ===
 score = 0
@@ -172,13 +204,15 @@ validPivotHigh = pivotHighCandidate and emaDistance[leftbar] >= pivothighfilter
 buyConditions = score >= scoreThresholdBuy and
   emaDistance < 0 and
   myrsi < 45 and
-  validPivotLow
+  validPivotLow and
+  athNoChange
 
 // Sell signal conditions
 sellConditions = sellScore >= scoreThresholdSell and
   emaDistance > 0 and
   myrsi > 55 and
-  validPivotHigh
+  validPivotHigh and
+  sellAthBreakout
 
 // === Signal Filtering ===
 // Filter consecutive signals
@@ -196,6 +230,8 @@ if sellSignal
 // === Plotting ===
 plot(title = 'EMA 200', series = ema200, color = color.new(color.red, 0), linewidth=2)
 plot(title = 'EMA 9', series = ema9, color = color.new(color.yellow, 0), linewidth=2)
+plot(title = 'All-Time High', series = showAthLevels and not na(ath) ? ath : na, color = color.new(color.fuchsia, 0), linewidth=2, style = plot.style_stepline)
+plot(title = 'Sell Reference ATH', series = showAthLevels and not na(sellRef) ? sellRef : na, color = color.new(color.orange, 0), linewidth=1, style = plot.style_stepline)
 
 // Score display for buy signals
 if buySignal
@@ -313,3 +349,4 @@ plot(title = 'barsSinceAccelerationSell', series = barsSinceAccelerationSell, co
 plot(title = 'barsSinceVolume', series = barsSinceVolume, color = color.new(color.silver, 100), linewidth=2)
 plot(title = 'score', series = score, color = color.new(color.orange, 100), linewidth=2)
 plot(title = 'sellScore', series = sellScore, color = color.new(color.purple, 100), linewidth=2)
+plot(title = 'athUnchangedBars', series = athUnchangedBars, color = color.new(color.teal, 100), linewidth=2)

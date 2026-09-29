@@ -1,0 +1,114 @@
+//@version=6
+// TF: Any | Type: Manual trigger (score override) | Target: DCA_Spot manual buy/sell
+//
+// Description:
+//   Manual-trigger companion for the DCA_Spot strategy. Emits the exact webhook payload
+//   the execution bot consumes, but bypasses every signal condition and uses a fixed
+//   override score so the bot's position sizing / sell proportion still applies.
+//
+// Main idea:     Flip "Manual Action" to Buy or Sell -> one alert fires with the override
+//                score (default 8), regardless of EMA200, RSI, pivots, ATH or score gates.
+//                Buy  : base score 8 -> bot "Strong Buy"   (1.3x position size)
+//                Sell : sell score 8 -> bot sells 25% of holdings
+//
+// Instructions:  Set Manual Action to Buy/Sell, wait for the alert, then set it back to
+//                "None" to re-arm. Leaving it engaged and changing another input afterwards
+//                triggers a full recalculation that can re-fire the alert.
+indicator(title = 'DCA Manual Trigger (Score Override)', shorttitle = 'DCAManTrig', overlay = true)
+
+// === Input Parameters ===
+manualAction   = input.string(title = 'Manual Action', options = ['None', 'Buy', 'Sell'], defval = 'None', group = 'Manual Override')
+overrideScore  = input.int(title = 'Override Score', defval = 8, minval = 7, maxval = 9, group = 'Manual Override')
+TradingUserName = input.string(title = 'Trading User Name', options = ['ALL', 'Danyway', 'Enzo', 'Luca'], defval = 'ALL', group = 'Manual Override')
+AccountTypeOpt  = input.string(title = 'Account Type', options = ['Standard', 'CopyTrading', 'Demo', 'TestNet'], defval = 'Standard', group = 'Manual Override')
+ExchangeOpt     = input.string(title = 'Exchange', defval = 'Binance', group = 'Manual Override')
+AlertType       = input.string(title = 'Alert Type', options = ['alerts', 'trading_bot', 'debug'], defval = 'trading_bot', group = 'Manual Override')
+
+// === Manual Trigger (one-shot per activation) ===
+// Inputs are constant across bars, so the transition is latched on the realtime bar only.
+var string lastAction = 'None'
+actionChanged = manualAction != lastAction
+buyTrigger  = manualAction == 'Buy'  and actionChanged
+sellTrigger = manualAction == 'Sell' and actionChanged
+if barstate.islast
+    lastAction := manualAction
+
+plotshape(series = buyTrigger, title = 'Manual Buy', style = shape.triangleup,
+  location = location.belowbar, color = color.green, size = size.normal)
+plotshape(series = sellTrigger, title = 'Manual Sell', style = shape.triangledown,
+  location = location.abovebar, color = color.red, size = size.normal)
+
+// === Webhook Integration ===
+secretKey = "YOUR_SECRET_KEY_HERE"
+_ticker = syminfo.ticker
+_currenttf = timeframe.period
+
+if buyTrigger
+    // Replace USDT.P with USDT (for futures), and ensure USD becomes USDT for Binance
+    _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
+    // Convert USD to USDT for Binance compatibility (e.g., BTCUSD -> BTCUSDT)
+    if str.contains(_shortticker, "USD") and not str.contains(_shortticker, "USDT")
+        _shortticker := str.replace_all(_shortticker, "USD", "USDT")
+    _symbol = "Symbol: " + _shortticker + ","
+    _timeframe = "Time Frame: " + _currenttf + ","
+    _side = "Side: BUY,"
+    _entry = "Entry: " + str.tostring(close) + ","
+    _score = "Score: " + str.tostring(overrideScore) + ","
+    _username = "Username: " + TradingUserName + ","
+    _accounttype = "AccountType: " + AccountTypeOpt + ","
+    _exchange = "Exchange: " + ExchangeOpt + ","
+    _strategy = "Strategy: DCA_Spot,"
+    _action = "Action: OpenLong"
+
+    _msg = "{"
+    _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+    _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
+    _msg := _msg + '"' + "msg" + '":' + '"' +
+      _username + "\\n" +
+      _accounttype + "\\n" +
+      _symbol + "\\n" +
+      _exchange + "\\n" +
+      _timeframe + "\\n" +
+      _side + "\\n" +
+      _entry + "\\n" +
+      _score + "\\n" +
+      _strategy + "\\n" +
+      _action + '"'
+    _msg := _msg + "}"
+
+    alert(_msg, alert.freq_once_per_bar)
+
+if sellTrigger
+    // Replace USDT.P with USDT (for futures), and ensure USD becomes USDT for Binance
+    _shortticker = str.replace_all(_ticker, "USDT.P", "USDT")
+    // Convert USD to USDT for Binance compatibility (e.g., BTCUSD -> BTCUSDT)
+    if str.contains(_shortticker, "USD") and not str.contains(_shortticker, "USDT")
+        _shortticker := str.replace_all(_shortticker, "USD", "USDT")
+    _symbol = "Symbol: " + _shortticker + ","
+    _timeframe = "Time Frame: " + _currenttf + ","
+    _side = "Side: SELL,"
+    _takeprofit = "TakeProfit: " + str.tostring(close) + ","
+    _score = "Score: " + str.tostring(overrideScore) + ","
+    _username = "Username: " + TradingUserName + ","
+    _accounttype = "AccountType: " + AccountTypeOpt + ","
+    _exchange = "Exchange: " + ExchangeOpt + ","
+    _strategy = "Strategy: DCA_Spot,"
+    _action = "Action: Sell"
+
+    _msg = "{"
+    _msg := _msg + '"' + "key" + '":' + '"' + secretKey + '",'
+    _msg := _msg + '"' + "telegram_alert_type" + '":' + '"' + AlertType + '",'
+    _msg := _msg + '"' + "msg" + '":' + '"' +
+      _username + "\\n" +
+      _accounttype + "\\n" +
+      _symbol + "\\n" +
+      _exchange + "\\n" +
+      _timeframe + "\\n" +
+      _side + "\\n" +
+      _takeprofit + "\\n" +
+      _score + "\\n" +
+      _strategy + "\\n" +
+      _action + '"'
+    _msg := _msg + "}"
+
+    alert(_msg, alert.freq_once_per_bar)
